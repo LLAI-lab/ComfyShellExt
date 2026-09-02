@@ -1,0 +1,164 @@
+[
+  {
+    "file": "plain.png",
+    "has": false,
+    "container": "png",
+    "note": "no metadata at all"
+  },
+  {
+    "file": "a1111.png",
+    "has": false,
+    "container": "png",
+    "note": "A1111 metadata must not be flagged as ComfyUI"
+  },
+  {
+    "file": "comfy_text.png",
+    "has": true,
+    "container": "png",
+    "note": "standard SaveImage output"
+  },
+  {
+    "file": "comfy_prompt_only.png",
+    "has": true,
+    "container": "png",
+    "note": "API prompt only"
+  },
+  {
+    "file": "comfy_itxt_cjk.png",
+    "has": true,
+    "container": "png",
+    "note": "compressed UTF-8 iTXt"
+  },
+  {
+    "file": "comfy_ztxt.png",
+    "has": true,
+    "container": "png",
+    "note": "compressed latin-1 zTXt"
+  },
+  {
+    "file": "appended.png",
+    "has": true,
+    "container": "png",
+    "note": "payload after IEND, only the raw scan can see it"
+  },
+  {
+    "file": "plain.jpg",
+    "has": false,
+    "container": "jpeg",
+    "note": ""
+  },
+  {
+    "file": "comfy.jpg",
+    "has": true,
+    "container": "jpeg",
+    "note": "EXIF ImageDescription + UserComment"
+  },
+  {
+    "file": "plain.webp",
+    "has": false,
+    "container": "webp",
+    "note": ""
+  },
+  {
+    "file": "comfy.webp",
+    "has": true,
+    "container": "webp",
+    "note": "SaveAnimatedWEBP style EXIF tags"
+  },
+  {
+    "file": "plain.gif",
+    "has": false,
+    "container": "gif",
+    "note": ""
+  },
+  {
+    "file": "comfy.gif",
+    "has": true,
+    "container": "gif",
+    "note": "GIF comment extension"
+  },
+  {
+    "file": "plain.mp4",
+    "has": false,
+    "container": "mp4",
+    "note": ""
+  },
+  {
+    "file": "comfy_comment.mp4",
+    "has": true,
+    "container": "mp4",
+    "note": "moov/udta/meta/ilst (c)cmt"
+  },
+  {
+    "file": "comfy_mdta.mp4",
+    "has": true,
+    "container": "mp4",
+    "note": "moov/meta mdta keys table"
+  },
+  {
+    "file": "plain.webm",
+    "has": false,
+    "container": "matroska",
+    "note": ""
+  },
+  {
+    "file": "comfy_comment.webm",
+    "has": true,
+    "container": "matroska",
+    "note": "matroska SimpleTag COMMENT"
+  },
+  {
+    "file": "comfy.mkv",
+    "has": true,
+    "container": "matroska",
+    "note": "custom SimpleTag WORKFLOW"
+  },
+  {
+    "file": "comfy.avi",
+    "has": true,
+    "container": "avi",
+    "note": "RIFF LIST INFO ICMT"
+  },
+  {
+    "file": "comfy.flac",
+    "has": true,
+    "container": "flac",
+    "note": "Vorbis comment"
+  },
+  {
+    "file": "truncated.png",
+    "has": true,
+    "container": "png",
+    "note": "tEXt cut off mid JSON"
+  },
+  {
+    "file": "ztxt_broken.png",
+    "has": true,
+    "container": "png",
+    "note": "zTXt with a deflate stream that ends early"
+  },
+  {
+    "file": "exif.png",
+    "has": true,
+    "container": "png",
+    "note": "workflow in a PNG eXIf chunk"
+  },
+  {
+    "file": "after_idat.png",
+    "has": true,
+    "container": "png",
+    "note": "tEXt placed after IDAT"
+  },
+  {
+    "file": "xmp_escaped.jpg",
+    "has": true,
+    "container": "jpeg",
+    "note": "XMP packet with XML escaped quotes"
+  },
+  {
+    "file": "qt_comment.mp4",
+    "has": true,
+    "container": "mp4",
+    "note": "moov/udta/(c)cmt as a bare string"
+  }
+]
