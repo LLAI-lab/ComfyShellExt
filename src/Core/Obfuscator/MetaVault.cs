@@ -23,9 +23,9 @@ namespace ComfyShellExt.Core.Obfuscator
         private const int ChunkDataHeader = 8;   // "CSE1" magic + payload length
 
         /// <summary>
-        /// Minimal marker chunk embedded even when no metadata is kept: without a path the
-        /// isolated thumbnail host cannot see the file name, so the file itself has to say
-        /// "I am obfuscated". CSE1 = sealed payload, CSE0 = bare marker.
+        /// Minimal marker chunk for retrofitting files obfuscated before this existed, or when
+        /// no metadata is kept. CSE1 = sealed payload, CSE0 = bare marker; not embedded
+        /// automatically — keepmeta = 0 files stay byte-clean.
         /// </summary>
         public static void EmbedMarker(string pngPath)
         {
