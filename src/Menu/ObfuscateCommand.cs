@@ -128,6 +128,9 @@ namespace ComfyShellExt.Menu
                 clean.Save(output, ImageFormat.Png);
             }
             if (encrypt && captured != null) MetaVault.Embed(output, captured);
+            // The marker lets the thumbnail host recognise obfuscated files without a file name
+            // (stream-only initialisation), so preview keeps working when keepmeta is off.
+            else if (encrypt) MetaVault.EmbedMarker(output);
             if (!encrypt && carried != null) MetaVault.Restore(output, carried);
             return output;
         }

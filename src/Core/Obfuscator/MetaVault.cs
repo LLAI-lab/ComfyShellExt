@@ -23,6 +23,21 @@ namespace ComfyShellExt.Core.Obfuscator
         private const int ChunkDataHeader = 8;   // "CSE1" magic + payload length
 
         /// <summary>
+        /// Minimal marker chunk embedded even when no metadata is kept: without a path the
+        /// isolated thumbnail host cannot see the file name, so the file itself has to say
+        /// "I am obfuscated". CSE1 = sealed payload, CSE0 = bare marker.
+        /// </summary>
+        public static void EmbedMarker(string pngPath)
+        {
+            try
+            {
+                InsertChunks(pngPath, new[] { BuildChunk(ChunkType,
+                    new byte[] { (byte)'C', (byte)'S', (byte)'E', (byte)'0' }) });
+            }
+            catch (Exception ex) { Log.Error("marker embed " + pngPath, ex); }
+        }
+
+        /// <summary>
         /// Suffix the obfuscation command appends to output file names; also the cheap filename
         /// marker the thumbnail provider looks for.
         /// </summary>
@@ -38,28 +53,45 @@ namespace ComfyShellExt.Core.Obfuscator
             try
             {
                 using (var stream = File.OpenRead(pngPath))
+                    return HasPayload(stream);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Stream variant, for thumbnail hosts that only hand us an IStream.</summary>
+        public static bool HasPayload(Stream stream)
+        {
+            if (stream == null || !stream.CanSeek) return false;
+            long saved = stream.Position;
+            try
+            {
+                stream.Seek(0, SeekOrigin.Begin);
+                var signature = new byte[8];
+                if (stream.Read(signature, 0, signature.Length) != signature.Length ||
+                    signature[0] != 0x89 || signature[1] != (byte)'P' || signature[2] != (byte)'N' ||
+                    signature[3] != (byte)'G')
+                    return false;
+                var header = new byte[8];
+                while (stream.Read(header, 0, header.Length) == header.Length)
                 {
-                    var signature = new byte[8];
-                    if (stream.Read(signature, 0, signature.Length) != signature.Length) return false;
-                    var header = new byte[8];
-                    while (stream.Read(header, 0, header.Length) == header.Length)
+                    int length = (header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3];
+                    var type = Encoding.ASCII.GetString(header, 4, 4);
+                    if (type == "IEND") return false;
+                    if (type == ChunkType && length >= 4)
                     {
-                        int length = (header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3];
-                        var type = Encoding.ASCII.GetString(header, 4, 4);
-                        if (type == "IEND") return false;
-                        if (type == ChunkType && length >= 4)
-                        {
-                            var magic = new byte[4];
-                            if (stream.Read(magic, 0, magic.Length) != magic.Length) return false;
-                            if (magic[0] == (byte)'C' && magic[1] == (byte)'S' &&
-                                magic[2] == (byte)'E' && magic[3] == (byte)'1') return true;
-                            stream.Seek(length - magic.Length, SeekOrigin.Current);
-                        }
-                        stream.Seek(length + 4, SeekOrigin.Current); // skip data remainder and CRC
+                        var magic = new byte[4];
+                        if (stream.Read(magic, 0, magic.Length) != magic.Length) return false;
+                        if (IsOwnMagic(magic)) return true;
+                        stream.Seek(length - magic.Length, SeekOrigin.Current);
                     }
+                    stream.Seek(length + 4, SeekOrigin.Current); // skip data remainder and CRC
                 }
             }
             catch { }
+            finally
+            {
+                try { stream.Seek(saved, SeekOrigin.Begin); } catch { }
+            }
             return false;
         }
 
@@ -328,8 +360,13 @@ namespace ComfyShellExt.Core.Obfuscator
 
         private static bool IsOwnChunk(byte[] data)
         {
-            return data.Length >= 4 && data[0] == (byte)'C' && data[1] == (byte)'S' &&
-                   data[2] == (byte)'E' && data[3] == (byte)'1';
+            return data.Length >= 4 && IsOwnMagic(data);
+        }
+
+        private static bool IsOwnMagic(byte[] magic)
+        {
+            return magic[0] == (byte)'C' && magic[1] == (byte)'S' && magic[2] == (byte)'E' &&
+                   (magic[3] == (byte)'0' || magic[3] == (byte)'1');
         }
 
         // ------------------------------------------------------------------ png surgery

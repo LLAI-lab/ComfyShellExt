@@ -111,7 +111,7 @@ namespace ComfyShellExt.Shell
             alpha = WtsAlphaType.Unknown;
             try
             {
-                if (string.IsNullOrEmpty(SourcePath) || !IsObfuscatedImage()) return false;
+                if (!IsObfuscatedImage()) return false;
                 using (var stream = OpenStream())
                 {
                     if (stream == null) return false;
@@ -132,7 +132,7 @@ namespace ComfyShellExt.Shell
                     }
                 }
                 alpha = WtsAlphaType.Argb;
-                Log.Write("obfuscated preview {0}", SourcePath);
+                Log.Write("obfuscated preview {0}", SourcePath ?? "(stream)");
                 return phbmp != IntPtr.Zero;
             }
             catch (Exception ex)
@@ -141,20 +141,32 @@ namespace ComfyShellExt.Shell
                 phbmp = IntPtr.Zero;
                 return false;
             }
+            finally
+            {
+                if (SourceStream != null) ThumbnailDelegator.Rewind(SourceStream);
+            }
         }
 
         /// <summary>
         /// Obfuscation marker: the output file name suffix, or — for renamed files — our sealed
-        /// metadata payload in the PNG. The pixel shuffle itself is dimension keyed, so both
-        /// kinds restore without any key material.
+        /// metadata payload in the PNG. Works with a path and with stream-only initialisation
+        /// (the isolated thumbnail host hands us a stream and no path). The pixel shuffle itself
+        /// is dimension keyed, so both kinds restore without any key material.
         /// </summary>
         private bool IsObfuscatedImage()
         {
             try
             {
-                if (Path.GetFileNameWithoutExtension(SourcePath)
-                        .EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal)) return true;
-                if (Extension() == ".png") return MetaVault.HasPayload(SourcePath);
+                if (!string.IsNullOrEmpty(SourcePath))
+                {
+                    if (Path.GetFileNameWithoutExtension(SourcePath)
+                            .EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal)) return true;
+                    if (Extension() == ".png") return MetaVault.HasPayload(SourcePath);
+                    return false;
+                }
+                if (SourceStream == null) return false;
+                using (var stream = OpenStream())
+                    return stream != null && MetaVault.HasPayload(stream);
             }
             catch (Exception ex) { Log.Error("obfuscation detect", ex); }
             return false;
