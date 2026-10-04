@@ -22,6 +22,47 @@ namespace ComfyShellExt.Core.Obfuscator
         private const string ChunkType = "prVt"; // ancillary private chunk, safe per PNG spec
         private const int ChunkDataHeader = 8;   // "CSE1" magic + payload length
 
+        /// <summary>
+        /// Suffix the obfuscation command appends to output file names; also the cheap filename
+        /// marker the thumbnail provider looks for.
+        /// </summary>
+        public const string ObfuscatedSuffix = "_混淆";
+
+        /// <summary>
+        /// Light check for our sealed payload: walks chunk headers and seeks over the data instead
+        /// of reading it, so thumbnails can detect obfuscated files without touching the megabytes
+        /// of image data.
+        /// </summary>
+        public static bool HasPayload(string pngPath)
+        {
+            try
+            {
+                using (var stream = File.OpenRead(pngPath))
+                {
+                    var signature = new byte[8];
+                    if (stream.Read(signature, 0, signature.Length) != signature.Length) return false;
+                    var header = new byte[8];
+                    while (stream.Read(header, 0, header.Length) == header.Length)
+                    {
+                        int length = (header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3];
+                        var type = Encoding.ASCII.GetString(header, 4, 4);
+                        if (type == "IEND") return false;
+                        if (type == ChunkType && length >= 4)
+                        {
+                            var magic = new byte[4];
+                            if (stream.Read(magic, 0, magic.Length) != magic.Length) return false;
+                            if (magic[0] == (byte)'C' && magic[1] == (byte)'S' &&
+                                magic[2] == (byte)'E' && magic[3] == (byte)'1') return true;
+                            stream.Seek(length - magic.Length, SeekOrigin.Current);
+                        }
+                        stream.Seek(length + 4, SeekOrigin.Current); // skip data remainder and CRC
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
         public static byte[] Capture(string sourcePath)
         {
             try

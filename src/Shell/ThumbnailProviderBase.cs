@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using ComfyShellExt.Core;
+using ComfyShellExt.Core.Obfuscator;
 using ComfyShellExt.Core.Util;
 using ComfyShellExt.Shell.Interop;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
@@ -43,6 +44,9 @@ namespace ComfyShellExt.Shell
             pdwAlpha = WtsAlphaType.Unknown;
             var settings = Settings.Current;
             int size = (int)Math.Max(1, Math.Min(cx, 4096));
+            if (settings.ObfuscatePreview && Kind == MediaKind.Image &&
+                TryRenderObfuscatedPreview(size, settings, out phbmp, out pdwAlpha))
+                return;
             string generator = DetectGenerator();
             Log.Write("thumbnail cx={0} kind={1} badge={2} path={3}", cx, Kind,
                 generator ?? "no", SourcePath);
@@ -94,6 +98,66 @@ namespace ComfyShellExt.Shell
                 phbmp = baseBitmap;
                 pdwAlpha = baseAlpha;
             }
+        }
+
+        /// <summary>
+        /// Obfuscated files are noise; when obfuscate.preview is on, render the deobfuscated
+        /// pixels as the thumbnail — the preview pane reuses the same bitmap — and badge it so it
+        /// is not mistaken for the original. Any failure falls back to the normal flow.
+        /// </summary>
+        private bool TryRenderObfuscatedPreview(int size, Settings settings, out IntPtr phbmp, out WtsAlphaType alpha)
+        {
+            phbmp = IntPtr.Zero;
+            alpha = WtsAlphaType.Unknown;
+            try
+            {
+                if (string.IsNullOrEmpty(SourcePath) || !IsObfuscatedImage()) return false;
+                using (var stream = OpenStream())
+                {
+                    if (stream == null) return false;
+                    using (var raw = new Bitmap(stream))
+                    using (var restored = new Bitmap(raw.Width, raw.Height,
+                        System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+                    {
+                        using (var graphics = System.Drawing.Graphics.FromImage(restored))
+                            graphics.DrawImageUnscaled(raw, 0, 0);
+                        PixelShuffle.Apply(restored, false);
+                        using (var fitted = BitmapUtil.Fit(restored, size))
+                        {
+                            if (fitted == null) return false;
+                            BadgeRenderer.Draw(fitted, settings, Settings.ObfuscationTool,
+                                settings.BadgePosition);
+                            phbmp = BitmapUtil.ToHBitmap(fitted);
+                        }
+                    }
+                }
+                alpha = WtsAlphaType.Argb;
+                Log.Write("obfuscated preview {0}", SourcePath);
+                return phbmp != IntPtr.Zero;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("obfuscated preview", ex);
+                phbmp = IntPtr.Zero;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Obfuscation marker: the output file name suffix, or — for renamed files — our sealed
+        /// metadata payload in the PNG. The pixel shuffle itself is dimension keyed, so both
+        /// kinds restore without any key material.
+        /// </summary>
+        private bool IsObfuscatedImage()
+        {
+            try
+            {
+                if (Path.GetFileNameWithoutExtension(SourcePath)
+                        .EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal)) return true;
+                if (Extension() == ".png") return MetaVault.HasPayload(SourcePath);
+            }
+            catch (Exception ex) { Log.Error("obfuscation detect", ex); }
+            return false;
         }
 
         private bool TryGetBase(int cx, Settings settings, out IntPtr hbmp, out WtsAlphaType alpha)

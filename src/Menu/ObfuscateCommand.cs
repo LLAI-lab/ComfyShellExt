@@ -104,7 +104,8 @@ namespace ComfyShellExt.Menu
         {
             string output = Program.Unique(Path.Combine(
                 Path.GetDirectoryName(Path.GetFullPath(path)),
-                Path.GetFileNameWithoutExtension(path) + (encrypt ? "_混淆" : "_还原") + ".png"));
+                Path.GetFileNameWithoutExtension(path) +
+                (encrypt ? MetaVault.ObfuscatedSuffix : "_还原") + ".png"));
             // Metadata preservation: obfuscation embeds the original entries when keepmeta is on;
             // deobfuscation always restores whatever the obfuscated file actually carries.
             byte[] captured = null;

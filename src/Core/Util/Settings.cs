@@ -101,6 +101,14 @@ namespace ComfyShellExt.Core.Util
         /// restores whatever the file actually carries, regardless of this switch.
         /// </summary>
         public bool ObfuscateKeepMeta;
+        /// <summary>
+        /// Show obfuscated files deobfuscated in Explorer: thumbnails and the preview pane render
+        /// the restored pixels with an obfuscation badge instead of noise. Off by default because
+        /// it reveals the picture to anyone browsing the folder.
+        /// </summary>
+        public bool ObfuscatePreview;
+        /// <summary>Badge text drawn over the restored preview of an obfuscated file.</summary>
+        public string BadgeTextObfuscated = "混淆";
 
         public static Settings Current
         {
@@ -141,9 +149,13 @@ namespace ComfyShellExt.Core.Util
                 case AiMeta.SwarmUI: return BadgeTextSwarm;
                 case AiMeta.Fooocus: return BadgeTextFooocus;
                 case AiMeta.InvokeAI: return BadgeTextInvoke;
+                case ObfuscationTool: return BadgeTextObfuscated;
                 default: return BadgeText;
             }
         }
+
+        /// <summary>Pseudo tool id passed to the badge renderer for restored obfuscation previews.</summary>
+        public const string ObfuscationTool = "ComfyShellExt.Obfuscation";
 
         private static Settings Load(string path)
         {
@@ -190,6 +202,8 @@ namespace ComfyShellExt.Core.Util
             s.MenuObfuscateLabel = Str(map, "menu.obfuscatelabel", s.MenuObfuscateLabel);
             s.MenuDeobfuscateLabel = Str(map, "menu.deobfuscatelabel", s.MenuDeobfuscateLabel);
             s.ObfuscateKeepMeta = Bool(map, "obfuscate.keepmeta", s.ObfuscateKeepMeta);
+            s.ObfuscatePreview = Bool(map, "obfuscate.preview", s.ObfuscatePreview);
+            s.BadgeTextObfuscated = Str(map, "badge.text.obfuscated", s.BadgeTextObfuscated);
             return s;
         }
 
