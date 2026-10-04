@@ -84,12 +84,29 @@ namespace ComfyShellExt.Menu
             string output = Program.Unique(Path.Combine(
                 Path.GetDirectoryName(Path.GetFullPath(path)),
                 Path.GetFileNameWithoutExtension(path) + (encrypt ? "_混淆" : "_还原") + ".png"));
+            // Metadata preservation: obfuscation embeds the original entries when keepmeta is on;
+            // deobfuscation always restores whatever the obfuscated file actually carries.
+            byte[] captured = null;
+            List<MetaVault.Record> carried = null;
+            if (encrypt)
+            {
+                if (Settings.Current.ObfuscateKeepMeta) captured = MetaVault.Capture(path);
+            }
+            else
+            {
+                carried = MetaVault.Extract(path);
+            }
+            int width, height;
             using (Bitmap source = Load(path))
             using (Bitmap clean = Normalize(source))
             {
+                width = clean.Width;
+                height = clean.Height;
                 PixelShuffle.Apply(clean, encrypt);
                 clean.Save(output, ImageFormat.Png);
             }
+            if (encrypt && captured != null) MetaVault.Embed(output, captured);
+            if (!encrypt && carried != null) MetaVault.Restore(output, carried);
             return output;
         }
 

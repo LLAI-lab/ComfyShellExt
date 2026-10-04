@@ -43,7 +43,7 @@ REM --- ComfyShellExt.dll (core + shell extension) ---------------------------
 >>"%LIBRSP%" echo -debug:pdbonly
 >>"%LIBRSP%" echo -nostdlib+
 >>"%LIBRSP%" echo -out:"%OUT%\ComfyShellExt.dll"
-for %%r in (mscorlib System System.Core System.Drawing) do >>"%LIBRSP%" echo -reference:"%REFDIR%\%%r.dll"
+for %%r in (mscorlib System System.Core System.Drawing System.IO.Compression) do >>"%LIBRSP%" echo -reference:"%REFDIR%\%%r.dll"
 for /r "%~dp0src\Core" %%f in (*.cs) do >>"%LIBRSP%" echo "%%f"
 for /r "%~dp0src\Shell" %%f in (*.cs) do >>"%LIBRSP%" echo "%%f"
 echo --- ComfyShellExt.dll

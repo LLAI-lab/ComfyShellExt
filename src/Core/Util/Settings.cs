@@ -94,6 +94,13 @@ namespace ComfyShellExt.Core.Util
         public bool MenuObfuscate = true;
         public string MenuObfuscateLabel = "混淆图片（像素重排）";
         public string MenuDeobfuscateLabel = "解混淆图片（像素重排）";
+        /// <summary>
+        /// When obfuscating, carry the original text metadata (workflow / prompt / EXIF) inside
+        /// the obfuscated file in scrambled form so deobfuscation can restore it. Off by default:
+        /// the point of obfuscating is that no workflow remains in the file. Deobfuscation always
+        /// restores whatever the file actually carries, regardless of this switch.
+        /// </summary>
+        public bool ObfuscateKeepMeta;
 
         public static Settings Current
         {
@@ -182,6 +189,7 @@ namespace ComfyShellExt.Core.Util
             s.MenuObfuscate = Bool(map, "menu.obfuscate", s.MenuObfuscate);
             s.MenuObfuscateLabel = Str(map, "menu.obfuscatelabel", s.MenuObfuscateLabel);
             s.MenuDeobfuscateLabel = Str(map, "menu.deobfuscatelabel", s.MenuDeobfuscateLabel);
+            s.ObfuscateKeepMeta = Bool(map, "obfuscate.keepmeta", s.ObfuscateKeepMeta);
             return s;
         }
 
