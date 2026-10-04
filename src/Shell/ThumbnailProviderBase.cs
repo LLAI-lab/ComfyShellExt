@@ -148,10 +148,12 @@ namespace ComfyShellExt.Shell
         }
 
         /// <summary>
-        /// Obfuscation marker: the output file name suffix, or — for renamed files — our sealed
-        /// metadata payload in the PNG. Works with a path and with stream-only initialisation
-        /// (the isolated thumbnail host hands us a stream and no path). The pixel shuffle itself
-        /// is dimension keyed, so both kinds restore without any key material.
+        /// Obfuscation marker: the output file name suffix, the web tool's "obfuscated_" prefix,
+        /// or — for renamed files — our sealed metadata payload in the PNG. Works with a path and
+        /// with stream-only initialisation (the isolated thumbnail host hands us a stream and no
+        /// path). The pixel shuffle is dimension keyed, so all three kinds restore keylessly.
+        /// Content-only detection is not feasible: a shuffled photo's gradient energy sits too
+        /// close to its original's to tell apart without false positives.
         /// </summary>
         private bool IsObfuscatedImage()
         {
@@ -159,8 +161,9 @@ namespace ComfyShellExt.Shell
             {
                 if (!string.IsNullOrEmpty(SourcePath))
                 {
-                    if (Path.GetFileNameWithoutExtension(SourcePath)
-                            .EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal)) return true;
+                    var name = Path.GetFileNameWithoutExtension(SourcePath);
+                    if (name.EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal) ||
+                        name.StartsWith("obfuscated_", StringComparison.OrdinalIgnoreCase)) return true;
                     if (Extension() == ".png") return MetaVault.HasPayload(SourcePath);
                     return false;
                 }
