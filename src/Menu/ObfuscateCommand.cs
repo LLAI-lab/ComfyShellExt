@@ -59,7 +59,7 @@ namespace ComfyShellExt.Menu
             }
             if (written.Count == 1 && skipped.Count == 0)
             {
-                if (!noOpen) Program.Reveal(written[0]);
+                NotifyShell(written);
                 return 0;
             }
             var message = new System.Text.StringBuilder();
@@ -75,8 +75,29 @@ namespace ComfyShellExt.Menu
                     message.Append("  ").Append(skipped[i]).Append('\n');
             }
             Program.Show(message.ToString(), MessageBoxIcon.Information);
-            if (!noOpen) Program.Reveal(written[0]);
+            NotifyShell(written);
             return 0;
+        }
+
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern void SHChangeNotify(int eventId, uint flags, string item1, IntPtr item2);
+
+        private const int ShcneCreate = 0x2;          // SHCNE_CREATE
+        private const uint ShcnfPathFlush = 0x3005u;  // SHCNF_PATHW | SHCNF_FLUSHNOWAIT
+
+        /// <summary>
+        /// Makes the new files appear in the folder view the user is already looking at instead
+        /// of opening a new Explorer window: the shell inserts each item in place, so the
+        /// current selection and scroll position stay untouched. No-op when no view is showing
+        /// the folder.
+        /// </summary>
+        private static void NotifyShell(List<string> files)
+        {
+            foreach (var file in files)
+            {
+                try { SHChangeNotify(ShcneCreate, ShcnfPathFlush, file, IntPtr.Zero); }
+                catch { }
+            }
         }
 
         private static string Process(string path, bool encrypt)

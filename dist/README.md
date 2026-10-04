@@ -105,6 +105,9 @@ ComfyWorkflowMenu.exe deobfuscate "D:\output\ComfyUI_00042__混淆.png" --quiet
 关掉这两项：ini 里 `[menu] obfuscate = 0`；菜单文字可用 `menu.obfuscatelabel` /
 `menu.deobfuscatelabel` 改。开关和文字即时生效，不用重装。
 
+混淆/解混淆完成后，新文件通过 shell 变更通知**就地出现在当前打开的文件夹视图里**
+（局部刷新，不弹新窗口、不跳选中项，当前选中的文件保持不变）。
+
 
 ## 调整角标的位置和大小
 
