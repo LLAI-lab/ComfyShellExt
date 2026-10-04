@@ -148,22 +148,24 @@ namespace ComfyShellExt.Shell
         }
 
         /// <summary>
-        /// Obfuscation marker: the output file name suffix, the web tool's "obfuscated_" prefix,
-        /// or — for renamed files — our sealed metadata payload in the PNG. Works with a path and
-        /// with stream-only initialisation (the isolated thumbnail host hands us a stream and no
-        /// path). The pixel shuffle is dimension keyed, so all three kinds restore keylessly.
-        /// Content-only detection is not feasible: a shuffled photo's gradient energy sits too
-        /// close to its original's to tell apart without false positives.
+        /// Obfuscation marker: a configurable file name keyword (obfuscate.keywords, substring
+        /// match, e.g. the built-in "_混淆" suffix and the web tool's "obfuscated_" prefix), or —
+        /// for renamed files — our sealed metadata payload in the PNG. Works with a path and with
+        /// stream-only initialisation (the isolated thumbnail host hands us a stream and no
+        /// path, where file name keywords are unavailable). The pixel shuffle is dimension
+        /// keyed, so all kinds restore keylessly.
         /// </summary>
         private bool IsObfuscatedImage()
         {
             try
             {
+                var settings = Settings.Current;
                 if (!string.IsNullOrEmpty(SourcePath))
                 {
                     var name = Path.GetFileNameWithoutExtension(SourcePath);
-                    if (name.EndsWith(MetaVault.ObfuscatedSuffix, StringComparison.Ordinal) ||
-                        name.StartsWith("obfuscated_", StringComparison.OrdinalIgnoreCase)) return true;
+                    foreach (var keyword in settings.ObfuscateKeywords)
+                        if (!string.IsNullOrEmpty(keyword) &&
+                            name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0) return true;
                     if (Extension() == ".png") return MetaVault.HasPayload(SourcePath);
                     return false;
                 }

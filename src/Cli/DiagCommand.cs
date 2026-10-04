@@ -38,9 +38,10 @@ namespace ComfyShellExt.Cli
             Console.WriteLine("menu       : dynamic={0} staticVerbs={1}  \"{2}\"",
                 settings.MenuDynamic ? "on" : "off", settings.MenuStaticVerbs ? "on" : "off",
                 settings.MenuViewLabel);
-            Console.WriteLine("obfuscate  : menu={0} keepmeta={1} preview={2}",
+            Console.WriteLine("obfuscate  : menu={0} keepmeta={1} preview={2} keywords=[{3}]",
                 settings.MenuObfuscate ? "on" : "off", settings.ObfuscateKeepMeta ? "on" : "off",
-                settings.ObfuscatePreview ? "on" : "off");
+                settings.ObfuscatePreview ? "on" : "off",
+                string.Join(", ", settings.ObfuscateKeywords));
             Console.WriteLine("menu clsid : {0}", WorkflowContextMenu.Clsid);
             Console.WriteLine("menu exe   : {0}{1}", MenuExe(), File.Exists(MenuExe()) ? "" : "  (MISSING)");
             Console.WriteLine();

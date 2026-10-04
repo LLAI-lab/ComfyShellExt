@@ -109,6 +109,12 @@ namespace ComfyShellExt.Core.Util
         public bool ObfuscatePreview;
         /// <summary>Badge text drawn over the restored preview of an obfuscated file.</summary>
         public string BadgeTextObfuscated = "混淆";
+        /// <summary>
+        /// File name keywords that mark an image as obfuscated: any file whose name (without
+        /// extension) contains one of these shows the restored preview. Comma separated in the
+        /// ini; matching is case-insensitive substring. Defaults keep the built-in behaviour.
+        /// </summary>
+        public string[] ObfuscateKeywords = { "_混淆", "obfuscated_" };
 
         public static Settings Current
         {
@@ -204,6 +210,7 @@ namespace ComfyShellExt.Core.Util
             s.ObfuscateKeepMeta = Bool(map, "obfuscate.keepmeta", s.ObfuscateKeepMeta);
             s.ObfuscatePreview = Bool(map, "obfuscate.preview", s.ObfuscatePreview);
             s.BadgeTextObfuscated = Str(map, "badge.text.obfuscated", s.BadgeTextObfuscated);
+            s.ObfuscateKeywords = Words(map, "obfuscate.keywords", s.ObfuscateKeywords);
             return s;
         }
 
@@ -274,6 +281,20 @@ namespace ComfyShellExt.Core.Util
                 if (e.Length == 0) continue;
                 if (e[0] != '.') e = "." + e;
                 if (!list.Contains(e)) list.Add(e);
+            }
+            return list.Count == 0 ? dflt : list.ToArray();
+        }
+
+        /// <summary>Free-form keyword list (no dot prefixing); empty or missing keeps the default.</summary>
+        private static string[] Words(Dictionary<string, string> m, string k, string[] dflt)
+        {
+            string v;
+            if (!m.TryGetValue(k, out v)) return dflt;
+            var list = new List<string>();
+            foreach (var part in v.Split(new[] { ',', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var word = part.Trim();
+                if (word.Length > 0 && !list.Contains(word)) list.Add(word);
             }
             return list.Count == 0 ? dflt : list.ToArray();
         }
