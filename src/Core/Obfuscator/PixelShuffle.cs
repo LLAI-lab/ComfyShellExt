@@ -54,10 +54,12 @@ namespace ComfyShellExt.Core.Obfuscator
             for (long i = 0; i < total; i++)
             {
                 // The web tool encrypts with new[curve[i+o]] = old[curve[i]]; the inverse swap
-                // restores it. Both sides must agree on offset and curve exactly.
+                // restores it. Both sides must agree on offset and curve exactly, so the walk
+                // goes through the curve entries — skipping this mapping would leave a plain
+                // raster rotation that cannot undo the web tool's output.
                 long src = encrypt ? i : (i + offset) % total;
                 long dst = encrypt ? (i + offset) % total : i;
-                long s = src * 4, d = dst * 4;
+                long s = curve[(int)src] * 4, d = curve[(int)dst] * 4;
                 moved[d] = pixels[s];
                 moved[d + 1] = pixels[s + 1];
                 moved[d + 2] = pixels[s + 2];
@@ -66,17 +68,17 @@ namespace ComfyShellExt.Core.Obfuscator
             Buffer.BlockCopy(moved, 0, pixels, 0, pixels.Length);
         }
 
-        /// <summary>Packed curve positions (x &lt;&lt; 16 | y), one entry per pixel.</summary>
+        /// <summary>Curve positions as linear pixel offsets (y * width + x), one per pixel.</summary>
         private static int[] GilbertCurve(int width, int height)
         {
             var curve = new int[(long)width * height];
             int index = 0;
-            if (width >= height) Generate2d(curve, ref index, 0, 0, width, 0, 0, height);
-            else Generate2d(curve, ref index, 0, 0, 0, height, width, 0);
+            if (width >= height) Generate2d(width, curve, ref index, 0, 0, width, 0, 0, height);
+            else Generate2d(width, curve, ref index, 0, 0, 0, height, width, 0);
             return curve;
         }
 
-        private static void Generate2d(int[] curve, ref int index, int x, int y, int ax, int ay, int bx, int by)
+        private static void Generate2d(int width, int[] curve, ref int index, int x, int y, int ax, int ay, int bx, int by)
         {
             int w = Math.Abs(ax + ay), h = Math.Abs(bx + by);
             int dax = Math.Sign(ax), day = Math.Sign(ay);
@@ -84,12 +86,12 @@ namespace ComfyShellExt.Core.Obfuscator
 
             if (h == 1)
             {
-                for (int i = 0; i < w; i++) { curve[index++] = x << 16 | y; x += dax; y += day; }
+                for (int i = 0; i < w; i++) { curve[index++] = y * width + x; x += dax; y += day; }
                 return;
             }
             if (w == 1)
             {
-                for (int i = 0; i < h; i++) { curve[index++] = x << 16 | y; x += dbx; y += dby; }
+                for (int i = 0; i < h; i++) { curve[index++] = y * width + x; x += dbx; y += dby; }
                 return;
             }
 
@@ -100,15 +102,15 @@ namespace ComfyShellExt.Core.Obfuscator
             if (2 * w > 3 * h)
             {
                 if ((Math.Abs(ax2 + ay2) % 2) != 0 && w > 2) { ax2 += dax; ay2 += day; }
-                Generate2d(curve, ref index, x, y, ax2, ay2, bx, by);
-                Generate2d(curve, ref index, x + ax2, y + ay2, ax - ax2, ay - ay2, bx, by);
+                Generate2d(width, curve, ref index, x, y, ax2, ay2, bx, by);
+                Generate2d(width, curve, ref index, x + ax2, y + ay2, ax - ax2, ay - ay2, bx, by);
             }
             else
             {
                 if ((Math.Abs(bx2 + by2) % 2) != 0 && h > 2) { bx2 += dbx; by2 += dby; }
-                Generate2d(curve, ref index, x, y, bx2, by2, ax2, ay2);
-                Generate2d(curve, ref index, x + bx2, y + by2, ax, ay, bx - bx2, by - by2);
-                Generate2d(curve, ref index, x + (ax - dax) + (bx2 - dbx), y + (ay - day) + (by2 - dby),
+                Generate2d(width, curve, ref index, x, y, bx2, by2, ax2, ay2);
+                Generate2d(width, curve, ref index, x + bx2, y + by2, ax, ay, bx - bx2, by - by2);
+                Generate2d(width, curve, ref index, x + (ax - dax) + (bx2 - dbx), y + (ay - day) + (by2 - dby),
                     -bx2, -by2, -(ax - ax2), -(ay - ay2));
             }
         }
