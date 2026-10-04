@@ -28,14 +28,17 @@ namespace ComfyShellExt.Shell
         private const int MaxFiles = 64;
         private const int MaxProbed = 8;
         private const int MaxViewFiles = 16;
-        private const int CmdView = 0;
-        private const int CmdObfuscate = 1;
-        private const int CmdDeobfuscate = 2;
         private const string VerbView = "ComfyShellExtView";
         private const string VerbObfuscate = "ComfyShellExtObfuscate";
         private const string VerbDeobfuscate = "ComfyShellExtDeobfuscate";
 
         private readonly List<string> _files = new List<string>();
+        // Command ids Explorer reports back are offsets from idCmdFirst, i.e. insertion order.
+        // They differ depending on whether the viewer entry is present, so the assignment made
+        // during QueryContextMenu is recorded per instance and used for invoking and verbs.
+        private int _idView = -1;
+        private int _idObfuscate = -1;
+        private int _idDeobfuscate = -1;
 
         public int Initialize(IntPtr pidlFolder, ComTypes.IDataObject pdtobj, IntPtr hkeyProgId)
         {
@@ -58,44 +61,41 @@ namespace ComfyShellExt.Shell
                 int wanted = (hasAiMeta ? 1 : 0) + (hasImage ? 2 : 0);
                 if (idCmdFirst + (uint)wanted > idCmdLast) return 0;
 
+                _idView = _idObfuscate = _idDeobfuscate = -1;
                 uint position = indexMenu;
-                int added = 0;
+                int nextId = 0;
                 if (hasAiMeta)
                 {
                     var label = settings.MenuViewLabel;
                     if (_files.Count > 1) label += " (" + _files.Count + ")";
+                    _idView = nextId++;
                     if (!MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
-                            MenuNative.MfString, (UIntPtr)(idCmdFirst + CmdView), label))
-                        return added;
-                    added++;
+                            MenuNative.MfString, (UIntPtr)(idCmdFirst + (uint)_idView), label))
+                    { _idView = -1; return nextId - 1; }
                 }
                 if (hasImage)
                 {
-                    if (added > 0)
+                    if (nextId > 0)
                         MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
-                            MenuNative.MfSeparator, (UIntPtr)(idCmdFirst + added), null);
-                    added += InsertObfuscate(hmenu, position, idCmdFirst + (uint)added, settings);
+                            MenuNative.MfSeparator, UIntPtr.Zero, null);
+                    _idObfuscate = nextId++;
+                    if (!MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
+                            MenuNative.MfString, (UIntPtr)(idCmdFirst + (uint)_idObfuscate),
+                            settings.MenuObfuscateLabel))
+                    { _idObfuscate = -1; return nextId - 1; }
+                    _idDeobfuscate = nextId++;
+                    if (!MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
+                            MenuNative.MfString, (UIntPtr)(idCmdFirst + (uint)_idDeobfuscate),
+                            settings.MenuDeobfuscateLabel))
+                    { _idDeobfuscate = -1; return nextId - 1; }
                 }
-                return added;
+                return nextId;
             }
             catch (Exception ex)
             {
                 Log.Error("QueryContextMenu", ex);
                 return 0;
             }
-        }
-
-        /// <summary>Obfuscate and deobfuscate entries for the selection. Both are always offered:
-        /// the selection decides what makes sense, and the executor reports files it cannot handle.</summary>
-        private int InsertObfuscate(IntPtr hmenu, uint position, uint idCmd, Settings settings)
-        {
-            if (!MenuNative.InsertMenuW(hmenu, position, MenuNative.MfByPosition |
-                    MenuNative.MfString, (UIntPtr)idCmd, settings.MenuObfuscateLabel))
-                return 0;
-            if (!MenuNative.InsertMenuW(hmenu, position + 1, MenuNative.MfByPosition |
-                    MenuNative.MfString, (UIntPtr)(idCmd + 1u), settings.MenuDeobfuscateLabel))
-                return 1;
-            return 2;
         }
 
         public int InvokeCommand(IntPtr pici)
@@ -107,18 +107,15 @@ namespace ComfyShellExt.Shell
                 if (!MenuNative.TryReadVerbId(pici, out id, out verb)) return ShellConstants.EFail;
                 if (verb != null)
                 {
-                    if (verb.Equals(VerbView, StringComparison.OrdinalIgnoreCase)) id = CmdView;
-                    else if (verb.Equals(VerbObfuscate, StringComparison.OrdinalIgnoreCase)) id = CmdObfuscate;
-                    else if (verb.Equals(VerbDeobfuscate, StringComparison.OrdinalIgnoreCase)) id = CmdDeobfuscate;
+                    if (verb.Equals(VerbView, StringComparison.OrdinalIgnoreCase)) id = _idView;
+                    else if (verb.Equals(VerbObfuscate, StringComparison.OrdinalIgnoreCase)) id = _idObfuscate;
+                    else if (verb.Equals(VerbDeobfuscate, StringComparison.OrdinalIgnoreCase)) id = _idDeobfuscate;
                     else id = -1;
                 }
-                switch (id)
-                {
-                    case CmdView: Launch("view", pici, MaxViewFiles); return 0;
-                    case CmdObfuscate: Launch("obfuscate", pici, MaxFiles); return 0;
-                    case CmdDeobfuscate: Launch("deobfuscate", pici, MaxFiles); return 0;
-                    default: return ShellConstants.EFail;
-                }
+                if (id >= 0 && id == _idView) { Launch("view", pici, MaxViewFiles); return 0; }
+                if (id >= 0 && id == _idObfuscate) { Launch("obfuscate", pici, MaxFiles); return 0; }
+                if (id >= 0 && id == _idDeobfuscate) { Launch("deobfuscate", pici, MaxFiles); return 0; }
+                return ShellConstants.EFail;
             }
             catch (Exception ex)
             {
@@ -144,20 +141,11 @@ namespace ComfyShellExt.Shell
                 {
                     case MenuNative.GcsVerbA:
                     case MenuNative.GcsVerbW:
-                        text = id == CmdView ? VerbView
-                             : id == CmdObfuscate ? VerbObfuscate
-                             : id == CmdDeobfuscate ? VerbDeobfuscate
-                             : null;
+                        text = VerbFor(id);
                         break;
                     case MenuNative.GcsHelpTextA:
                     case MenuNative.GcsHelpTextW:
-                        text = id == CmdView
-                            ? "查看 AI 生图的提示词与参数（ComfyUI / SD WebUI / NovelAI 等）"
-                            : id == CmdObfuscate
-                            ? "Gilbert 曲线像素重排：图片变成纯噪点，隐藏画面与工作流，输出 PNG，可随时解混淆还原"
-                            : id == CmdDeobfuscate
-                            ? "还原像素重排过的图片（对未混淆的图片无意义）"
-                            : null;
+                        text = HelpFor(id);
                         break;
                     default:
                         return ShellConstants.ENotImpl;
@@ -172,6 +160,25 @@ namespace ComfyShellExt.Shell
                 Log.Error("GetCommandString", ex);
                 return ShellConstants.ENotImpl;
             }
+        }
+
+        private string VerbFor(long id)
+        {
+            if (id >= 0 && id == _idView) return VerbView;
+            if (id >= 0 && id == _idObfuscate) return VerbObfuscate;
+            if (id >= 0 && id == _idDeobfuscate) return VerbDeobfuscate;
+            return null;
+        }
+
+        private string HelpFor(long id)
+        {
+            if (id >= 0 && id == _idView)
+                return "查看 AI 生图的提示词与参数（ComfyUI / SD WebUI / NovelAI 等）";
+            if (id >= 0 && id == _idObfuscate)
+                return "Gilbert 曲线像素重排：图片变成纯噪点，隐藏画面与工作流，输出 PNG，可随时解混淆还原";
+            if (id >= 0 && id == _idDeobfuscate)
+                return "还原像素重排过的图片（对未混淆的图片无意义）";
+            return null;
         }
 
         private bool AnyHasImageExtension(Settings settings)

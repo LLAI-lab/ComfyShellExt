@@ -39,7 +39,8 @@ namespace ComfyShellExt.Cli
 
         /// <summary>
         /// Builds a real menu for a real selection, which exercises the whole conditional path:
-        /// data object parsing, workflow detection and item insertion.
+        /// data object parsing, workflow detection, item insertion, and the offset to verb mapping
+        /// Explorer relies on to route the click back to the right command.
         /// </summary>
         private static int CheckMenu(string sample)
         {
@@ -51,11 +52,30 @@ namespace ComfyShellExt.Cli
             {
                 if (probe == null) continue;
                 var expected = WorkflowDetector.InspectFile(probe, DetectOptions.Fast()).HasWorkflow;
-                int items = CountItems(probe);
-                bool ok = expected ? items > 0 : items == 0;
+                var verbs = MenuVerbs(probe);
+                var flat = new System.Collections.Generic.List<string>(verbs);
+                flat.RemoveAll(v => v == "-");
+                // Expected layout: viewer entry only for AI metadata, obfuscation pair only for
+                // images. The verb sequence per offset is the contract Explorer relies on.
+                System.Collections.Generic.List<string> want;
+                bool image = IsImageExtension(System.IO.Path.GetExtension(probe));
+                if (expected && image)
+                    want = new System.Collections.Generic.List<string> {
+                        "ComfyShellExtView", "ComfyShellExtObfuscate", "ComfyShellExtDeobfuscate" };
+                else if (expected)
+                    want = new System.Collections.Generic.List<string> { "ComfyShellExtView" };
+                else if (image)
+                    want = new System.Collections.Generic.List<string> {
+                        "ComfyShellExtObfuscate", "ComfyShellExtDeobfuscate" };
+                else
+                    want = new System.Collections.Generic.List<string>();
+                bool ok = flat.Count == want.Count;
+                if (ok) for (int i = 0; i < want.Count; i++)
+                    if (flat[i] != want[i]) { ok = false; break; }
                 if (!ok) failures++;
-                Console.WriteLine("menu   {0,-24} items={1} workflow={2} {3}",
-                    System.IO.Path.GetFileName(probe), items, expected, ok ? "as designed" : "UNEXPECTED");
+                Console.WriteLine("menu   {0,-24} items={1} [{2}] {3}",
+                    System.IO.Path.GetFileName(probe), verbs.Count, string.Join(", ", verbs),
+                    ok ? "as designed" : "UNEXPECTED: clicks would launch the wrong command");
             }
             return failures;
         }
@@ -89,19 +109,53 @@ namespace ComfyShellExt.Cli
             return failures;
         }
 
-        private static int CountItems(string path)
+        /// <summary>Extensions the obfuscate entries cover; mirrors the menu handler's rule.</summary>
+        private static readonly string[] ImageExtensions =
+            { ".png", ".jpg", ".jpeg", ".jpe", ".webp", ".gif", ".bmp", ".dib", ".tif", ".tiff", ".avif" };
+
+        private static bool IsImageExtension(string extension)
         {
+            foreach (var image in ImageExtensions)
+                if (extension.Equals(image, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Builds the menu like Explorer does, then asks the handler for each position's verb via
+        /// GetCommandString. Separators report no verb and show as "-".
+        /// </summary>
+        private static System.Collections.Generic.List<string> MenuVerbs(string path)
+        {
+            var verbs = new System.Collections.Generic.List<string>();
             var handler = new WorkflowContextMenu();
             var data = new System.Windows.Forms.DataObject();
             var list = new System.Collections.Specialized.StringCollection { System.IO.Path.GetFullPath(path) };
             data.SetFileDropList(list);
             if (((IShellExtInit)handler).Initialize(IntPtr.Zero,
-                    (ComTypes.IDataObject)data, IntPtr.Zero) != 0) return -1;
+                    (ComTypes.IDataObject)data, IntPtr.Zero) != 0)
+            {
+                verbs.Add("(initialize failed)");
+                return verbs;
+            }
             var menu = CreatePopupMenu();
             try
             {
-                ((IContextMenu)handler).QueryContextMenu(menu, 0, 1000, 1999, 0);
-                return GetMenuItemCount(menu);
+                var context = (IContextMenu)handler;
+                context.QueryContextMenu(menu, 0, 1000, 1999, 0);
+                int count = GetMenuItemCount(menu);
+                for (uint offset = 0; offset < count; offset++)
+                {
+                    // 4 = GcsVerbW; MenuNative is internal to the shell assembly. The verb lands
+                    // in an unmanaged buffer because the interop signature takes a raw pointer.
+                    IntPtr buffer = Marshal.AllocHGlobal(128);
+                    try
+                    {
+                        int hr = context.GetCommandString((IntPtr)offset, 4, IntPtr.Zero, buffer, 128);
+                        verbs.Add(hr == 0 ? Marshal.PtrToStringUni(buffer) : "-");
+                    }
+                    finally { Marshal.FreeHGlobal(buffer); }
+                }
+                return verbs;
             }
             finally { DestroyMenu(menu); }
         }
