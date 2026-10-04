@@ -23,7 +23,7 @@ namespace ComfyShellExt.Cli
             foreach (var path in Expand(args.Values))
             {
                 var info = WorkflowDetector.InspectFile(path, options);
-                if (info.HasWorkflow) hits++;
+                if (info.HasAiMeta) hits++;
                 if (asJson) PrintJson(path, info);
                 else Print(path, info, args.Has("dump"));
             }
@@ -48,6 +48,8 @@ namespace ComfyShellExt.Cli
             Console.WriteLine("  container : {0}", info.Container);
             Console.WriteLine("  workflow  : {0}{1}", info.HasWorkflow ? "YES" : "no",
                 info.Source == null ? "" : "  <- " + info.Source);
+            if (info.Generator != null && !info.HasWorkflow)
+                Console.WriteLine("  generator : {0}", info.Generator);
             if (info.WorkflowJson != null)
                 Console.WriteLine("  graph     : {0} chars", info.WorkflowJson.Length);
             if (info.PromptJson != null)
@@ -79,6 +81,7 @@ namespace ComfyShellExt.Cli
             Core.Json.JsonText.Member(sb, ref first, "file", path);
             Core.Json.JsonText.Member(sb, ref first, "container", info.Container);
             Core.Json.JsonText.Member(sb, ref first, "has", info.HasWorkflow);
+            Core.Json.JsonText.Member(sb, ref first, "generator", info.Generator);
             Core.Json.JsonText.Member(sb, ref first, "source", info.Source);
             Core.Json.JsonText.Member(sb, ref first, "nodes", info.NodeCount);
             Core.Json.JsonText.Member(sb, ref first, "types", info.NodeTypes);
@@ -126,14 +129,18 @@ namespace ComfyShellExt.Cli
                 var name = Core.Json.JsonText.Str(map, "file");
                 bool want = Core.Json.JsonText.Flag(map, "has");
                 var wantContainer = Core.Json.JsonText.Str(map, "container");
+                var wantGenerator = Core.Json.JsonText.Str(map, "generator");
                 var info = WorkflowDetector.InspectFile(Path.Combine(dir, name), DetectOptions.Full());
                 bool ok = info.HasWorkflow == want &&
-                          (wantContainer == null || wantContainer == info.Container);
+                          (wantContainer == null || wantContainer == info.Container) &&
+                          (wantGenerator == null ||
+                           string.Equals(info.Generator, wantGenerator, StringComparison.OrdinalIgnoreCase));
                 if (ok) pass++;
                 else fail++;
                 Console.WriteLine("{0}  {1,-24} has={2,-5} container={3,-9} {4}",
                     ok ? "PASS" : "FAIL", name, info.HasWorkflow, info.Container,
-                    ok ? Detail(info) : "expected has=" + want + " container=" + wantContainer);
+                    ok ? Detail(info) : "expected has=" + want + " container=" + wantContainer +
+                        " generator=" + (wantGenerator ?? "-"));
             }
             Console.WriteLine();
             Console.WriteLine("{0} passed, {1} failed", pass, fail);
@@ -142,6 +149,7 @@ namespace ComfyShellExt.Cli
 
         private static string Detail(WorkflowInfo info)
         {
+            if (info.Generator != null && !info.HasWorkflow) return "generator=" + info.Generator;
             if (!info.HasWorkflow) return "";
             return string.Format("src={0} nodes={1} graph={2} prompt={3}", info.Source, info.NodeCount,
                 info.WorkflowJson == null ? 0 : info.WorkflowJson.Length,

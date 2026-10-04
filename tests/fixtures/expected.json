@@ -9,7 +9,8 @@
     "file": "a1111.png",
     "has": false,
     "container": "png",
-    "note": "A1111 metadata must not be flagged as ComfyUI"
+    "note": "A1111 metadata is AI generation, but never flagged as ComfyUI",
+    "generator": "A1111"
   },
   {
     "file": "comfy_text.png",
@@ -160,5 +161,54 @@
     "has": true,
     "container": "mp4",
     "note": "moov/udta/(c)cmt as a bare string"
+  },
+  {
+    "file": "a1111_full.png",
+    "has": false,
+    "container": "png",
+    "generator": "A1111",
+    "note": "A1111 parameters with quoted Lora hashes"
+  },
+  {
+    "file": "a1111.jpg",
+    "has": false,
+    "container": "jpeg",
+    "generator": "A1111",
+    "note": "A1111 parameters in EXIF UserComment"
+  },
+  {
+    "file": "novelai.png",
+    "has": false,
+    "container": "png",
+    "generator": "NovelAI",
+    "note": "Software + Comment JSON"
+  },
+  {
+    "file": "novelai.gif",
+    "has": false,
+    "container": "gif",
+    "generator": "NovelAI",
+    "note": "GIF comment block with embedded JSON"
+  },
+  {
+    "file": "swarmui.png",
+    "has": false,
+    "container": "png",
+    "generator": "SwarmUI",
+    "note": "sui_image_params JSON in parameters"
+  },
+  {
+    "file": "fooocus.png",
+    "has": false,
+    "container": "png",
+    "generator": "Fooocus",
+    "note": "Fooocus settings JSON in parameters"
+  },
+  {
+    "file": "invokeai.png",
+    "has": false,
+    "container": "png",
+    "generator": "InvokeAI",
+    "note": "invokeai_metadata JSON"
   }
 ]

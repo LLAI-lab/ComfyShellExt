@@ -76,7 +76,7 @@ set "MENURSP=%TEMP%\comfyshellext_menu.rsp"
 >>"%MENURSP%" echo -debug:pdbonly
 >>"%MENURSP%" echo -nostdlib+
 >>"%MENURSP%" echo -out:"%OUT%\ComfyWorkflowMenu.exe"
-for %%r in (mscorlib System System.Core System.Drawing System.Windows.Forms) do >>"%MENURSP%" echo -reference:"%REFDIR%\%%r.dll"
+for %%r in (mscorlib System System.Core System.Drawing System.Windows.Forms WindowsBase PresentationCore) do >>"%MENURSP%" echo -reference:"%REFDIR%\%%r.dll"
 >>"%MENURSP%" echo -reference:"%OUT%\ComfyShellExt.dll"
 for /r "%~dp0src\Menu" %%f in (*.cs) do >>"%MENURSP%" echo "%%f"
 echo --- ComfyWorkflowMenu.exe

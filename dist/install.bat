@@ -5,7 +5,7 @@ title ComfyShellExt Installer
 
 echo ##################################################################
 echo ##  ComfyShellExt - ComfyUI workflow badge for Explorer          ##
-echo ##  在资源管理器缩略图右下角显示 JSON 标记                        ##
+echo ##  在资源管理器缩略图上显示 AI 工具缩写标记                     ##
 echo ##################################################################
 echo.
 
@@ -56,10 +56,12 @@ echo --- registering 32-bit ---
 echo.
 if exist "%CLI%" "%CLI%" diag
 echo.
-echo Right click entries only appear on files that really carry a workflow. On
-echo Windows 11 legacy handlers live under "Show more options" (Shift+right click).
-echo 右键的"查看/导出"只在确实含工作流的文件上出现；Win11 需展开"显示更多选项"
-echo （或 Shift+右键）。想进一级菜单：把 ini 里 menu.staticverbs 改成 1 后重跑本脚本。
+echo The right click entry only appears on files that carry AI generation metadata
+echo (ComfyUI / SD WebUI / NovelAI etc). On Windows 11 legacy handlers live under
+echo "Show more options" (Shift+right click).
+echo 右键的“查看 AI 生图信息”只在识别到 AI 生图元数据的文件上出现；Win11 需展开
+echo “显示更多选项”（或 Shift+右键）。想进一级菜单：把 ini 里 menu.staticverbs
+echo 改成 1 后重跑本脚本。
 echo.
 echo Windows keeps a thumbnail cache, so files you already browsed may keep
 echo their old picture until the cache is cleared.

@@ -1,8 +1,9 @@
 # ComfyShellExt
 
-Windows 11 资源管理器（Explorer）缩略图扩展：检测图片 / 视频里是否嵌入了 ComfyUI
-工作流，若有则在**缩略图右上角**叠加一个 `JSON` 角标。附带的命令行工具可以把这些
-工作流 JSON 提取成一个可搜索的本地数据库。
+Windows 11 资源管理器（Explorer）缩略图扩展：检测图片 / 视频里嵌入的 AI 生图元数据
+（ComfyUI 工作流，以及 SD WebUI / A1111、NovelAI、SwarmUI、Fooocus、InvokeAI 的生成
+参数），有则按生成工具在**缩略图右上角**叠加缩写角标（`Comfy`、`A1111`、`NAI`……）。
+附带的命令行工具可以把 ComfyUI 工作流 JSON 提取成一个可搜索的本地数据库。
 
 结构参照 `D:\Green\apkshellext2`：绿色单目录、`regasm /codebase` 注册、
 `install.bat` / `uninstall.bat` / `restart_explorer.bat`。
@@ -30,28 +31,63 @@ Windows 11 资源管理器（Explorer）缩略图扩展：检测图片 / 视频�
 | `restart_explorer.bat` | 重启 explorer.exe |
 | `clear_thumbnail_cache.bat` | 清理 Windows 缩略图缓存（只删可重建的 `thumbcache_*.db`） |
 
-## 右键菜单：查看 / 导出
+## 右键菜单：查看 AI 生图信息
 
-检测到工作流的文件，右键会多出两项：
+检测到 AI 生图元数据的文件，右键会多出一项：**查看 AI 生图信息**。
+支持 ComfyUI、SD WebUI / A1111（含 Forge 等分支）、NovelAI、SwarmUI、Fooocus、InvokeAI；
+普通照片和不含这些元数据的文件不会出现菜单项。
 
-- **查看 ComfyUI 工作流** —— 生成一个自带样式的 HTML 页面并用默认浏览器打开，
-  里面有模型 / LoRA / 采样器 / 步数 / CFG / 种子 / 尺寸、正负提示词（对 API 格式是
-  顺着 KSampler 的 positive、negative 连线找到的真实提示词，不是猜的）、用到的节点，
-  以及 workflow 与 prompt 两份完整 JSON，可一键复制或另存。
-- **导出工作流 JSON** —— 存成源文件旁边的 `<原名>.workflow.json`，
-  不覆盖同名文件（会自动加 `(2)`），完成后在资源管理器里选中新文件。
-  多选时批量导出，结束后汇总提示；没有工作流的文件会被跳过并列出。
+这一项会生成一个自带样式的 HTML 页面并用默认浏览器打开，内容包括：
+
+- 生成工具、来源元数据块（如 `png:tEXt:parameters`）；
+- 生成参数表（模型 / LoRA / 采样器 / 步数 / CFG / 种子 / 尺寸等，按各工具的字段解析；
+  对 ComfyUI 的 API 格式是顺着 KSampler 的 positive、negative 连线找到的真实提示词）；
+- 正负提示词；
+- 用到的节点（ComfyUI）；
+- workflow / prompt / 各工具设置 JSON，可一键复制或另存（这就是原来的导出功能）；
+- "全部元数据"展开卡：文件里每一条文本元数据的出处和内容，未知工具也能看个明白。
+
+多选时一个页面列出每个文件的信息；选中的文件里没有 AI 元数据的会单独列出。
 
 `ComfyWorkflowMenu.exe` 必须和 `ComfyShellExt.dll` 放在同一个目录里，菜单命令靠它执行；
 缺失时点菜单会弹窗告知，而不是静默无反应。
 
-**Windows 11 的位置**：默认用的是"动态"处理器，它会读文件内容，只在真的含工作流时
+**Windows 11 的位置**：默认用的是"动态"处理器，它会读文件内容，只在真的含 AI 元数据时
 才出现——但 Win11 的一级右键菜单不加载这类旧式扩展，所以它在 **"显示更多选项"** 里
 （按 **Shift+右键** 可直接打开经典菜单）。
 
 想让菜单项出现在 Win11 一级菜单，把 ini 改成 `staticverbs = 1` 再重跑 `install.bat`：
-静态动词能进一级菜单，代价是无法读取文件内容，配置的所有图片/视频都会显示这两项
-（点了之后会提示该文件有没有工作流）。两种方式可以只开一个，也可以都开。
+静态动词能进一级菜单，代价是无法读取文件内容，配置的所有图片/视频都会显示这一项
+（点了之后会提示该文件有没有可识别的元数据）。两种方式可以只开一个，也可以都开。
+
+## 右键菜单：混淆 / 解混淆图片
+
+图片（不含视频）还会多出两项，**不需要识别到元数据**，任何配置的图片都有：
+
+- **混淆图片（像素重排）** —— 沿 Gilbert 空间填充曲线把每个像素移动固定步长，画面变成
+  纯噪点，同时输出文件剥掉全部元数据（工作流、提示词、EXIF 都不带走）。
+  输出为 `<原名>_混淆.png`，一律 PNG 保证无损。
+- **解混淆图片（像素重排）** —— 同一条曲线反向移动，把噪点还原成原图。
+  输出为 `<原名>_还原.png`。
+
+重排是纯像素置换，无损可逆；步长只由图片宽高决定（黄金分割比），解混淆不需要密钥文件。
+要点：
+
+- 输出一律 PNG。JPEG 源图也会转成 PNG 存（体积变大，但像素分毫不差）。
+- 动图（GIF / 多帧 TIFF / 动画 WebP）只处理第一帧。
+- 混淆两次就要解混淆两次；已经重新编码过的"混淆图"（例如另存成 JPEG）无法还原。
+- 超大图（超过 6400 万像素）会拒绝处理并提示。
+- webp / avif 走 WIC 解码，系统缺对应编解码器扩展时会提示跳过。
+
+命令行同样可用（支持多选，`--quiet` 把提示打到控制台）：
+
+```bat
+ComfyWorkflowMenu.exe obfuscate   "D:\output\ComfyUI_00042_.png"
+ComfyWorkflowMenu.exe deobfuscate "D:\output\ComfyUI_00042__混淆.png" --quiet
+```
+
+关掉这两项：ini 里 `[menu] obfuscate = 0`；菜单文字可用 `menu.obfuscatelabel` /
+`menu.deobfuscatelabel` 改。开关和文字即时生效，不用重装。
 
 
 ## 调整角标的位置和大小
@@ -66,7 +102,8 @@ Windows 11 资源管理器（Explorer）缩略图扩展：检测图片 / 视频�
 | `margin` | 与边缘的距离，按缩略图**长边**的百分比 | `3` |
 | `offsetx` / `offsety` | 微调偏移，长边百分比，正数向右 / 向下 | `0` |
 | `textminpx` | 长边小于该值就改画纯色小块（列表视图放不下文字） | `88` |
-| `text` | 角标文字，可改成 `WF`、`工作流` | `JSON` |
+| `text` | 未识别到具体工具时的角标文字 | `JSON` |
+| `text.comfyui` 等 | 各工具的角标缩写，另有 `text.a1111` / `text.novelai` / `text.swarmui` / `text.fooocus` / `text.invokeai` | `Comfy` / `A1111` / `NAI` / `Swarm` / `Foo` / `Invoke` |
 | `fill` / `border` / `textcolor` | AARRGGBB 颜色 | 深蓝底 + 青边 + 白字 |
 
 九个锚点：
@@ -222,9 +259,13 @@ ComfyWorkflowDb.exe diag --plan
 :: 自检：Explorer 会查询的 COM 接口是否齐备，并走一遍真实 COM 边界出图
 ComfyWorkflowDb.exe comcheck "D:\output\ComfyUI_00042_.png"
 
-:: 右键菜单的两个命令也可以直接调用（--quiet 把提示打到控制台而不是弹窗）
-ComfyWorkflowMenu.exe view   "D:\output\ComfyUI_00042_.png"
+:: 右键菜单的查看命令也可以直接调用，支持一次传多个文件（--quiet 把提示打到控制台）
+ComfyWorkflowMenu.exe view   "D:\output\ComfyUI_00042_.png" "D:\output\00270-3534562570.png"
 ComfyWorkflowMenu.exe export "D:\output\ComfyUI_00042_.png" --saveas
+
+:: 图片混淆 / 解混淆：Gilbert 曲线像素重排，输出 <原名>_混淆.png / <原名>_还原.png
+ComfyWorkflowMenu.exe obfuscate   "D:\output\ComfyUI_00042_.png"
+ComfyWorkflowMenu.exe deobfuscate "D:\output\ComfyUI_00042__混淆.png"
 ```
 
 数据库结构（纯文本，无需任何运行库）：

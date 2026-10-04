@@ -21,6 +21,20 @@ namespace ComfyShellExt.Core
         public string Container;
         /// <summary>Origin of the first hit, e.g. "png:tEXt:workflow".</summary>
         public string Source;
+        /// <summary>
+        /// Which AI tool produced the file: ComfyUI, A1111, NovelAI, SwarmUI, Fooocus, InvokeAI.
+        /// Null when nothing recognised. HasWorkflow implies Generator == "ComfyUI".
+        /// </summary>
+        public string Generator;
+        /// <summary>Generation settings in A1111 "parameters" text form (capture only).</summary>
+        public string RawText;
+        /// <summary>Settings JSON of a non ComfyUI tool such as NovelAI or SwarmUI (capture only).</summary>
+        public string ToolJson;
+        /// <summary>True when any known AI generation metadata was found, ComfyUI or not.</summary>
+        public bool HasAiMeta
+        {
+            get { return HasWorkflow || Generator != null; }
+        }
         /// <summary>Editor graph JSON when present.</summary>
         public string WorkflowJson;
         /// <summary>API format prompt JSON when present.</summary>

@@ -10,9 +10,9 @@ using ComTypes = System.Runtime.InteropServices.ComTypes;
 namespace ComfyShellExt.Shell
 {
     /// <summary>
-    /// Shared thumbnail handler logic: work out whether the file carries a ComfyUI workflow, obtain
-    /// the base thumbnail from the handler that owned the file type before us, then paint the badge.
-    /// When there is no workflow the original bitmap is passed straight through untouched.
+    /// Shared thumbnail handler logic: work out which AI tool produced the file, obtain the base
+    /// thumbnail from the handler that owned the file type before us, then paint the tool badge.
+    /// Without AI metadata the original bitmap is passed straight through untouched.
     /// </summary>
     public abstract class ThumbnailProviderBase : IThumbnailProvider, IInitializeWithItem, IInitializeWithFile
     {
@@ -43,25 +43,26 @@ namespace ComfyShellExt.Shell
             pdwAlpha = WtsAlphaType.Unknown;
             var settings = Settings.Current;
             int size = (int)Math.Max(1, Math.Min(cx, 4096));
-            bool badge = DetectWorkflow();
-            Log.Write("thumbnail cx={0} kind={1} badge={2} path={3}", cx, Kind, badge, SourcePath);
+            string generator = DetectGenerator();
+            Log.Write("thumbnail cx={0} kind={1} badge={2} path={3}", cx, Kind,
+                generator ?? "no", SourcePath);
 
             IntPtr baseBitmap;
             WtsAlphaType baseAlpha;
             if (!TryGetBase(size, settings, out baseBitmap, out baseAlpha))
             {
-                if (!badge || !settings.BadgePlaceholder)
+                if (generator == null || !settings.BadgePlaceholder)
                     throw new COMException("no base thumbnail", ShellConstants.EFail);
                 using (var tile = PlaceholderRenderer.Render(size, Label()))
                 {
-                    BadgeRenderer.Draw(tile, settings);
+                    BadgeRenderer.Draw(tile, settings, generator);
                     phbmp = BitmapUtil.ToHBitmap(tile);
                 }
                 if (phbmp == IntPtr.Zero) throw new COMException("placeholder failed", ShellConstants.EFail);
                 pdwAlpha = WtsAlphaType.Argb;
                 return;
             }
-            if (!badge)
+            if (generator == null)
             {
                 phbmp = baseBitmap;
                 pdwAlpha = baseAlpha;
@@ -74,7 +75,7 @@ namespace ComfyShellExt.Shell
                 {
                     if (bitmap != null)
                     {
-                        BadgeRenderer.Draw(bitmap, settings,
+                        BadgeRenderer.Draw(bitmap, settings, generator,
                             _baseIsIcon ? settings.BadgeIconPosition : settings.BadgePosition);
                         composed = BitmapUtil.ToHBitmap(bitmap);
                     }
@@ -149,20 +150,21 @@ namespace ComfyShellExt.Shell
             }
         }
 
-        protected bool DetectWorkflow()
+        /// <summary>Returns which AI tool the file came from, or null when it has no badge.</summary>
+        protected string DetectGenerator()
         {
             try
             {
                 using (var stream = OpenStream())
                 {
-                    if (stream == null) return false;
-                    return WorkflowDetector.HasWorkflow(stream);
+                    if (stream == null) return null;
+                    return WorkflowDetector.DetectGenerator(stream);
                 }
             }
             catch (Exception ex)
             {
                 Log.Error("detect", ex);
-                return false;
+                return null;
             }
             finally
             {

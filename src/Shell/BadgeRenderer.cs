@@ -7,18 +7,28 @@ using ComfyShellExt.Core.Util;
 
 namespace ComfyShellExt.Shell
 {
-    /// <summary>Draws the "JSON" marker into a corner of a thumbnail.</summary>
+    /// <summary>Draws the AI tool badge into a corner of a thumbnail.</summary>
     internal static class BadgeRenderer
     {
         public static void Draw(Bitmap bitmap, Settings settings)
         {
-            Draw(bitmap, settings, settings == null ? null : settings.BadgePosition);
+            Draw(bitmap, settings, null, null);
         }
 
         public static void Draw(Bitmap bitmap, Settings settings, string position)
         {
+            Draw(bitmap, settings, null, position);
+        }
+
+        /// <summary>
+        /// The badge text is the generating tool's abbreviation ("Comfy", "A1111", "NAI", ...);
+        /// null shows the plain badge.text fallback.
+        /// </summary>
+        public static void Draw(Bitmap bitmap, Settings settings, string generator, string position)
+        {
             if (bitmap == null || settings == null) return;
             if (string.IsNullOrEmpty(position)) position = settings.BadgePosition;
+            var badgeText = settings.BadgeTextFor(generator);
             // Explorer fits the thumbnail into a cx box, so the long edge tracks the requested size.
             // Scaling off the long edge keeps the badge the same visual size for any aspect ratio.
             int metric = Math.Max(bitmap.Width, bitmap.Height);
@@ -34,7 +44,7 @@ namespace ComfyShellExt.Shell
             int margin = Math.Max(0, (int)Math.Round(metric * settings.BadgeMargin / 100.0));
             int offsetX = (int)Math.Round(metric * settings.BadgeOffsetX / 100.0);
             int offsetY = (int)Math.Round(metric * settings.BadgeOffsetY / 100.0);
-            bool withText = metric >= settings.BadgeTextMinPx && !string.IsNullOrEmpty(settings.BadgeText);
+            bool withText = metric >= settings.BadgeTextMinPx && !string.IsNullOrEmpty(badgeText);
 
             using (var g = Graphics.FromImage(bitmap))
             {
@@ -51,8 +61,7 @@ namespace ComfyShellExt.Shell
                 {
                     var format = StringFormat.GenericTypographic;
                     format.FormatFlags |= StringFormatFlags.NoWrap;
-                    var text = settings.BadgeText;
-                    var measured = g.MeasureString(text, font, PointF.Empty, format);
+                    var measured = g.MeasureString(badgeText, font, PointF.Empty, format);
                     int padX = Math.Max(3, (int)Math.Round(height * 0.30));
                     int width = (int)Math.Ceiling(measured.Width) + padX * 2;
                     width = Math.Min(width, bitmap.Width - margin * 2);
@@ -62,7 +71,7 @@ namespace ComfyShellExt.Shell
                     format.LineAlignment = StringAlignment.Center;
                     format.Alignment = StringAlignment.Center;
                     using (var brush = new SolidBrush(ink))
-                        g.DrawString(text, font, brush, textRect, format);
+                        g.DrawString(badgeText, font, brush, textRect, format);
                 }
             }
         }

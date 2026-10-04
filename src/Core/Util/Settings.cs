@@ -15,6 +15,17 @@ namespace ComfyShellExt.Core.Util
 
         public string BadgeText = "JSON";
         /// <summary>
+        /// Badge text per AI tool; the badge shows the tool's abbreviation. Keys live in the ini
+        /// as badge.text.comfyui, badge.text.a1111, ... and BadgeText stays as the fallback for
+        /// anything without a known tool.
+        /// </summary>
+        public string BadgeTextComfy = "Comfy";
+        public string BadgeTextA1111 = "A1111";
+        public string BadgeTextNovelAI = "NAI";
+        public string BadgeTextSwarm = "Swarm";
+        public string BadgeTextFooocus = "Foo";
+        public string BadgeTextInvoke = "Invoke";
+        /// <summary>
         /// Nine anchors: TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight,
         /// BottomLeft, BottomCenter, BottomRight. An axis with no keyword is centred on that axis.
         /// Top right by default: Explorer paints the default player's icon over the bottom right
@@ -68,15 +79,21 @@ namespace ComfyShellExt.Core.Util
         public string[] ImageExtensions = { ".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif" };
         public string[] VideoExtensions = { ".mp4", ".webm", ".mkv", ".mov", ".avi" };
 
-        /// <summary>Content aware handler: the entries only appear when a workflow was found.</summary>
+        /// <summary>Content aware handler: the entry only appears when AI metadata was found.</summary>
         public bool MenuDynamic = true;
         /// <summary>
-        /// Static registry verbs. These reach the Windows 11 top level context menu, which legacy
-        /// handlers cannot, but they show for every file of the type regardless of content.
+        /// Static registry verb. This reaches the Windows 11 top level context menu, which legacy
+        /// handlers cannot, but it shows for every file of the type regardless of content.
         /// </summary>
         public bool MenuStaticVerbs;
-        public string MenuViewLabel = "查看 ComfyUI 工作流";
-        public string MenuExportLabel = "导出工作流 JSON";
+        public string MenuViewLabel = "查看 AI 生图信息";
+        /// <summary>
+        /// Obfuscate / deobfuscate entries for images (Gilbert curve pixel shuffle). Unlike the
+        /// viewer entry they do not require AI metadata, so they appear on any configured image.
+        /// </summary>
+        public bool MenuObfuscate = true;
+        public string MenuObfuscateLabel = "混淆图片（像素重排）";
+        public string MenuDeobfuscateLabel = "解混淆图片（像素重排）";
 
         public static Settings Current
         {
@@ -106,11 +123,32 @@ namespace ComfyShellExt.Core.Util
             lock (Gate) { _cached = null; }
         }
 
+        /// <summary>The badge text for one AI tool, e.g. "A1111" or "Comfy".</summary>
+        public string BadgeTextFor(string generator)
+        {
+            switch (generator ?? "")
+            {
+                case AiMeta.Comfy: return BadgeTextComfy;
+                case AiMeta.A1111: return BadgeTextA1111;
+                case AiMeta.NovelAI: return BadgeTextNovelAI;
+                case AiMeta.SwarmUI: return BadgeTextSwarm;
+                case AiMeta.Fooocus: return BadgeTextFooocus;
+                case AiMeta.InvokeAI: return BadgeTextInvoke;
+                default: return BadgeText;
+            }
+        }
+
         private static Settings Load(string path)
         {
             var s = new Settings();
             var map = ReadIni(path);
             s.BadgeText = Str(map, "badge.text", s.BadgeText);
+            s.BadgeTextComfy = Str(map, "badge.text.comfyui", s.BadgeTextComfy);
+            s.BadgeTextA1111 = Str(map, "badge.text.a1111", s.BadgeTextA1111);
+            s.BadgeTextNovelAI = Str(map, "badge.text.novelai", s.BadgeTextNovelAI);
+            s.BadgeTextSwarm = Str(map, "badge.text.swarmui", s.BadgeTextSwarm);
+            s.BadgeTextFooocus = Str(map, "badge.text.fooocus", s.BadgeTextFooocus);
+            s.BadgeTextInvoke = Str(map, "badge.text.invokeai", s.BadgeTextInvoke);
             s.BadgePosition = Str(map, "badge.position", Str(map, "badge.corner", s.BadgePosition));
             s.BadgeIconPosition = Str(map, "badge.iconposition",
                 Str(map, "badge.iconcorner", s.BadgeIconPosition));
@@ -141,7 +179,9 @@ namespace ComfyShellExt.Core.Util
             s.MenuDynamic = Bool(map, "menu.dynamic", s.MenuDynamic);
             s.MenuStaticVerbs = Bool(map, "menu.staticverbs", s.MenuStaticVerbs);
             s.MenuViewLabel = Str(map, "menu.viewlabel", s.MenuViewLabel);
-            s.MenuExportLabel = Str(map, "menu.exportlabel", s.MenuExportLabel);
+            s.MenuObfuscate = Bool(map, "menu.obfuscate", s.MenuObfuscate);
+            s.MenuObfuscateLabel = Str(map, "menu.obfuscatelabel", s.MenuObfuscateLabel);
+            s.MenuDeobfuscateLabel = Str(map, "menu.deobfuscatelabel", s.MenuDeobfuscateLabel);
             return s;
         }
 

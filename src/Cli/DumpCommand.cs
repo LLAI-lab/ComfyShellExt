@@ -58,14 +58,16 @@ namespace ComfyShellExt.Cli
                 }
                 Console.WriteLine("    workflow  : {0}{1}", result.HasWorkflow ? "YES" : "no",
                     result.Source == null ? "" : "  <- " + result.Source);
+                if (result.Generator != null && !result.HasWorkflow)
+                    Console.WriteLine("    generator : {0}", result.Generator);
                 if (result.WorkflowJson != null)
                     Console.WriteLine("    graph     : {0:N0} chars", result.WorkflowJson.Length);
                 if (result.PromptJson != null)
                     Console.WriteLine("    prompt    : {0:N0} chars", result.PromptJson.Length);
                 if (result.Incomplete)
                     Console.WriteLine("    note      : payload is truncated in the file, only partial JSON recovered");
-                if (!result.HasWorkflow)
-                    Console.WriteLine("    note      : no ComfyUI signature anywhere; try --deep, and check " +
+                if (!result.HasAiMeta)
+                    Console.WriteLine("    note      : no AI generation signature anywhere; try --deep, and check " +
                                       "whether the file was re-encoded or exported by another tool");
                 Console.WriteLine();
             }

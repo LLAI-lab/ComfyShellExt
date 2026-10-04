@@ -12,9 +12,11 @@ using ComTypes = System.Runtime.InteropServices.ComTypes;
 namespace ComfyShellExt.Shell
 {
     /// <summary>
-    /// Right click entries for files that carry a ComfyUI workflow. The file is inspected while the
-    /// menu is being built, so nothing is added for ordinary pictures and videos. Invoking a command
-    /// only starts ComfyWorkflowMenu.exe, keeping work out of the Explorer process.
+    /// The right click entries for files with AI generation metadata (ComfyUI, SD WebUI and
+    /// friends, NovelAI, SwarmUI, Fooocus, InvokeAI), plus the image obfuscation entries which
+    /// show for any configured image regardless of content. Inspection happens while the menu is
+    /// being built, so the viewer entry adds nothing for ordinary pictures; invoking only starts
+    /// ComfyWorkflowMenu.exe, keeping work out of the Explorer process.
     /// </summary>
     [ComVisible(true)]
     [Guid("AAA3323D-F184-4E10-A8A4-21402817A5A9")]
@@ -25,8 +27,13 @@ namespace ComfyShellExt.Shell
         public const string Clsid = "{AAA3323D-F184-4E10-A8A4-21402817A5A9}";
         private const int MaxFiles = 64;
         private const int MaxProbed = 8;
+        private const int MaxViewFiles = 16;
         private const int CmdView = 0;
-        private const int CmdExport = 1;
+        private const int CmdObfuscate = 1;
+        private const int CmdDeobfuscate = 2;
+        private const string VerbView = "ComfyShellExtView";
+        private const string VerbObfuscate = "ComfyShellExtObfuscate";
+        private const string VerbDeobfuscate = "ComfyShellExtDeobfuscate";
 
         private readonly List<string> _files = new List<string>();
 
@@ -45,24 +52,29 @@ namespace ComfyShellExt.Shell
                 if ((uFlags & MenuNative.CmfDefaultOnly) != 0) return 0;
                 var settings = Settings.Current;
                 if (!settings.MenuDynamic || _files.Count == 0) return 0;
-                if (!AnyHasWorkflow(settings)) return 0;
+                bool hasImage = settings.MenuObfuscate && AnyHasImageExtension(settings);
+                bool hasAiMeta = AnyHasAiMeta(settings);
+                if (!hasImage && !hasAiMeta) return 0;
+                int wanted = (hasAiMeta ? 1 : 0) + (hasImage ? 2 : 0);
+                if (idCmdFirst + (uint)wanted > idCmdLast) return 0;
 
                 uint position = indexMenu;
                 int added = 0;
-                if (_files.Count == 1 && idCmdFirst + CmdView <= idCmdLast)
+                if (hasAiMeta)
                 {
-                    if (MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
-                            MenuNative.MfString, (UIntPtr)(idCmdFirst + CmdView), settings.MenuViewLabel))
-                        added++;
+                    var label = settings.MenuViewLabel;
+                    if (_files.Count > 1) label += " (" + _files.Count + ")";
+                    if (!MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
+                            MenuNative.MfString, (UIntPtr)(idCmdFirst + CmdView), label))
+                        return added;
+                    added++;
                 }
-                if (idCmdFirst + CmdExport <= idCmdLast)
+                if (hasImage)
                 {
-                    var label = _files.Count == 1
-                        ? settings.MenuExportLabel
-                        : settings.MenuExportLabel + " (" + _files.Count + ")";
-                    if (MenuNative.InsertMenuW(hmenu, position, MenuNative.MfByPosition |
-                            MenuNative.MfString, (UIntPtr)(idCmdFirst + CmdExport), label))
-                        added++;
+                    if (added > 0)
+                        MenuNative.InsertMenuW(hmenu, position++, MenuNative.MfByPosition |
+                            MenuNative.MfSeparator, (UIntPtr)(idCmdFirst + added), null);
+                    added += InsertObfuscate(hmenu, position, idCmdFirst + (uint)added, settings);
                 }
                 return added;
             }
@@ -73,6 +85,19 @@ namespace ComfyShellExt.Shell
             }
         }
 
+        /// <summary>Obfuscate and deobfuscate entries for the selection. Both are always offered:
+        /// the selection decides what makes sense, and the executor reports files it cannot handle.</summary>
+        private int InsertObfuscate(IntPtr hmenu, uint position, uint idCmd, Settings settings)
+        {
+            if (!MenuNative.InsertMenuW(hmenu, position, MenuNative.MfByPosition |
+                    MenuNative.MfString, (UIntPtr)idCmd, settings.MenuObfuscateLabel))
+                return 0;
+            if (!MenuNative.InsertMenuW(hmenu, position + 1, MenuNative.MfByPosition |
+                    MenuNative.MfString, (UIntPtr)(idCmd + 1u), settings.MenuDeobfuscateLabel))
+                return 1;
+            return 2;
+        }
+
         public int InvokeCommand(IntPtr pici)
         {
             try
@@ -81,12 +106,19 @@ namespace ComfyShellExt.Shell
                 string verb;
                 if (!MenuNative.TryReadVerbId(pici, out id, out verb)) return ShellConstants.EFail;
                 if (verb != null)
-                    id = verb.Equals("ComfyShellExtView", StringComparison.OrdinalIgnoreCase) ? CmdView
-                        : verb.Equals("ComfyShellExtExport", StringComparison.OrdinalIgnoreCase) ? CmdExport
-                        : -1;
-                if (id != CmdView && id != CmdExport) return ShellConstants.EFail;
-                Launch(id == CmdView ? "view" : "export", MenuNative.ReadOwnerWindow(pici));
-                return 0;
+                {
+                    if (verb.Equals(VerbView, StringComparison.OrdinalIgnoreCase)) id = CmdView;
+                    else if (verb.Equals(VerbObfuscate, StringComparison.OrdinalIgnoreCase)) id = CmdObfuscate;
+                    else if (verb.Equals(VerbDeobfuscate, StringComparison.OrdinalIgnoreCase)) id = CmdDeobfuscate;
+                    else id = -1;
+                }
+                switch (id)
+                {
+                    case CmdView: Launch("view", pici, MaxViewFiles); return 0;
+                    case CmdObfuscate: Launch("obfuscate", pici, MaxFiles); return 0;
+                    case CmdDeobfuscate: Launch("deobfuscate", pici, MaxFiles); return 0;
+                    default: return ShellConstants.EFail;
+                }
             }
             catch (Exception ex)
             {
@@ -106,23 +138,31 @@ namespace ComfyShellExt.Shell
         {
             try
             {
-                bool view = idCmd.ToInt64() == CmdView;
+                long id = idCmd.ToInt64();
                 string text;
                 switch (uType)
                 {
                     case MenuNative.GcsVerbA:
                     case MenuNative.GcsVerbW:
-                        text = view ? "ComfyShellExtView" : "ComfyShellExtExport";
+                        text = id == CmdView ? VerbView
+                             : id == CmdObfuscate ? VerbObfuscate
+                             : id == CmdDeobfuscate ? VerbDeobfuscate
+                             : null;
                         break;
                     case MenuNative.GcsHelpTextA:
                     case MenuNative.GcsHelpTextW:
-                        text = view
-                            ? "查看该文件内嵌的 ComfyUI 工作流"
-                            : "把内嵌的 ComfyUI 工作流导出为 .json";
+                        text = id == CmdView
+                            ? "查看 AI 生图的提示词与参数（ComfyUI / SD WebUI / NovelAI 等）"
+                            : id == CmdObfuscate
+                            ? "Gilbert 曲线像素重排：图片变成纯噪点，隐藏画面与工作流，输出 PNG，可随时解混淆还原"
+                            : id == CmdDeobfuscate
+                            ? "还原像素重排过的图片（对未混淆的图片无意义）"
+                            : null;
                         break;
                     default:
                         return ShellConstants.ENotImpl;
                 }
+                if (text == null) return ShellConstants.ENotImpl;
                 bool unicode = uType == MenuNative.GcsVerbW || uType == MenuNative.GcsHelpTextW;
                 MenuNative.WriteString(pszName, cchMax, text, unicode);
                 return 0;
@@ -134,7 +174,18 @@ namespace ComfyShellExt.Shell
             }
         }
 
-        private bool AnyHasWorkflow(Settings settings)
+        private bool AnyHasImageExtension(Settings settings)
+        {
+            foreach (var file in _files)
+            {
+                var extension = System.IO.Path.GetExtension(file);
+                foreach (var image in settings.ImageExtensions)
+                    if (string.Equals(extension, image, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private bool AnyHasAiMeta(Settings settings)
         {
             var options = DetectOptions.Fast();
             options.EnableRawScan = settings.EnableRawScan;
@@ -144,13 +195,14 @@ namespace ComfyShellExt.Shell
             foreach (var file in _files)
             {
                 if (probed++ >= MaxProbed) break;
-                if (WorkflowDetector.InspectFile(file, options).HasWorkflow) return true;
+                if (WorkflowDetector.InspectFile(file, options).HasAiMeta) return true;
             }
             return false;
         }
 
-        private void Launch(string verb, IntPtr owner)
+        private void Launch(string verb, IntPtr pici, int maxFiles)
         {
+            var owner = MenuNative.ReadOwnerWindow(pici);
             var exe = Path.Combine(Paths.AppDir, "ComfyWorkflowMenu.exe");
             if (!File.Exists(exe))
             {
@@ -166,7 +218,7 @@ namespace ComfyShellExt.Shell
             int count = 0;
             foreach (var file in _files)
             {
-                if (verb == "view" && count >= 1) break;
+                if (count >= maxFiles) break;
                 arguments.Append(" \"").Append(file).Append('"');
                 count++;
             }

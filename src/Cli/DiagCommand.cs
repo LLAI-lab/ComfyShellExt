@@ -35,9 +35,9 @@ namespace ComfyShellExt.Cli
                 RegistryHelper.ReadClsidValue(VideoThumbnailProvider.Clsid, "DisableProcessIsolation", -1),
                 RegistryHelper.ReadClsidValue(VideoThumbnailProvider.Clsid, "DisableProcessIsolation", -1) == 1
                     ? "" : "  <- video thumbnails need this to be 1, re-run install.bat");
-            Console.WriteLine("menu       : dynamic={0} staticVerbs={1}  \"{2}\" / \"{3}\"",
+            Console.WriteLine("menu       : dynamic={0} staticVerbs={1}  \"{2}\"",
                 settings.MenuDynamic ? "on" : "off", settings.MenuStaticVerbs ? "on" : "off",
-                settings.MenuViewLabel, settings.MenuExportLabel);
+                settings.MenuViewLabel);
             Console.WriteLine("menu clsid : {0}", WorkflowContextMenu.Clsid);
             Console.WriteLine("menu exe   : {0}{1}", MenuExe(), File.Exists(MenuExe()) ? "" : "  (MISSING)");
             Console.WriteLine();

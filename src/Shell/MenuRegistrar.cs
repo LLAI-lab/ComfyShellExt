@@ -1,29 +1,35 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Win32;
 using ComfyShellExt.Core.Util;
 
 namespace ComfyShellExt.Shell
 {
     /// <summary>
-    /// Installs the right click entries. Two independent mechanisms, both driven by the ini:
-    /// a content aware COM handler (Windows 11 shows it under "show more options"), and static
-    /// registry verbs (reach the new top level menu but cannot look inside the file).
-    /// Every key created is recorded so uninstall removes exactly what was added.
+    /// Installs the right click entry. Two independent mechanisms, both driven by the ini:
+    /// a content aware COM handler (Windows 11 shows it under "show more options"), and a static
+    /// registry verb (reaches the new top level menu but cannot look inside the file). The viewer
+    /// offers the export buttons, so one entry is enough. Every key created is recorded so
+    /// uninstall removes exactly what was added.
     /// </summary>
     public static class MenuRegistrar
     {
         private const string HandlerName = "ComfyShellExt";
-        private const string ViewVerb = "ComfyShellExt.ViewWorkflow";
-        private const string ExportVerb = "ComfyShellExt.ExportWorkflow";
+        private const string ViewVerb = "ComfyShellExt.ViewAIInfo";
+        private const string ObfuscateVerb = "ComfyShellExt.Obfuscate";
+        private const string DeobfuscateVerb = "ComfyShellExt.Deobfuscate";
+        /// <summary>Static verb of older installs, removed when they upgrade.</summary>
+        private const string LegacyViewVerb = "ComfyShellExt.ViewWorkflow";
+        private const string LegacyExportVerb = "ComfyShellExt.ExportWorkflow";
         private const string KeyListName = "MenuKeys";
 
         public static void Register(Type type)
         {
             var clsid = "{" + type.GUID.ToString().ToUpperInvariant() + "}";
             var settings = Settings.Current;
-            RegistryHelper.Approve(clsid, "ComfyShellExt Workflow Context Menu", false);
+            RegistryHelper.Approve(clsid, "ComfyShellExt AI Info Context Menu", false);
             var created = new List<string>();
             var exe = Path.Combine(Paths.AppDir, "ComfyWorkflowMenu.exe");
             if (!File.Exists(exe)) Report("WARNING: ComfyWorkflowMenu.exe missing, menu commands will do nothing");
@@ -40,10 +46,20 @@ namespace ComfyShellExt.Shell
                         created.Add(key);
                     }
                     if (settings.MenuStaticVerbs)
+                        created.Add(WriteVerb(extension, ViewVerb, settings.MenuViewLabel, exe, "view"));
+                    // The shuffle only makes sense on images, so the static verbs skip videos
+                    // even though the view verb above covers everything.
+                    if (settings.MenuStaticVerbs && settings.MenuObfuscate &&
+                        settings.ImageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
                     {
-                        created.Add(WriteVerb(extension, ViewVerb, settings.MenuViewLabel, exe, "view", true));
-                        created.Add(WriteVerb(extension, ExportVerb, settings.MenuExportLabel, exe, "export", false));
+                        created.Add(WriteVerb(extension, ObfuscateVerb,
+                            settings.MenuObfuscateLabel, exe, "obfuscate"));
+                        created.Add(WriteVerb(extension, DeobfuscateVerb,
+                            settings.MenuDeobfuscateLabel, exe, "deobfuscate"));
                     }
+                    // Upgrades from the two entry layout leave these behind.
+                    RemoveLegacyVerb(extension, LegacyViewVerb);
+                    RemoveLegacyVerb(extension, LegacyExportVerb);
                 }
                 catch (Exception ex) { Report(extension + ": " + ex.Message); }
             }
@@ -53,7 +69,7 @@ namespace ComfyShellExt.Shell
                 Extensions(settings).Count));
         }
 
-        /// <summary>Dry run: the keys install would create for the right click entries.</summary>
+        /// <summary>Dry run: the keys install would create for the right click entry.</summary>
         public static List<string> Plan(Type type)
         {
             var clsid = "{" + type.GUID.ToString().ToUpperInvariant() + "}";
@@ -66,11 +82,15 @@ namespace ComfyShellExt.Shell
                     lines.Add(@"HKCR\SystemFileAssociations\" + extension +
                               @"\ShellEx\ContextMenuHandlers\" + HandlerName + " = " + clsid);
                 if (settings.MenuStaticVerbs)
-                {
                     lines.Add(@"HKCR\SystemFileAssociations\" + extension + @"\shell\" + ViewVerb +
                               "  -> \"" + exe + "\" view \"%1\"");
-                    lines.Add(@"HKCR\SystemFileAssociations\" + extension + @"\shell\" + ExportVerb +
-                              "  -> \"" + exe + "\" export \"%1\"");
+                if (settings.MenuStaticVerbs && settings.MenuObfuscate &&
+                    settings.ImageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+                {
+                    lines.Add(@"HKCR\SystemFileAssociations\" + extension + @"\shell\" + ObfuscateVerb +
+                              "  -> \"" + exe + "\" obfuscate \"%1\"");
+                    lines.Add(@"HKCR\SystemFileAssociations\" + extension + @"\shell\" + DeobfuscateVerb +
+                              "  -> \"" + exe + "\" deobfuscate \"%1\"");
                 }
             }
             if (lines.Count == 0) lines.Add("(both menu.dynamic and menu.staticverbs are off)");
@@ -90,8 +110,7 @@ namespace ComfyShellExt.Shell
             if (keys.Count == 0) Report("context menu: nothing was registered");
         }
 
-        private static string WriteVerb(string extension, string verb, string label, string exe,
-            string command, bool singleSelection)
+        private static string WriteVerb(string extension, string verb, string label, string exe, string command)
         {
             var key = @"SystemFileAssociations\" + extension + @"\shell\" + verb;
             using (var hklm = RegistryHelper.OpenHklm())
@@ -101,13 +120,21 @@ namespace ComfyShellExt.Shell
                 node.SetValue("MUIVerb", label, RegistryValueKind.String);
                 // Without this a verb here can be promoted to the double click default.
                 node.SetValue("NeverDefault", "", RegistryValueKind.String);
-                if (singleSelection) node.SetValue("MultiSelectModel", "Single", RegistryValueKind.String);
+                node.SetValue("MultiSelectModel", "Player", RegistryValueKind.String);
                 using (var commandKey = node.CreateSubKey("command"))
                     if (commandKey != null)
                         commandKey.SetValue("", "\"" + exe + "\" " + command + " \"%1\"",
                             RegistryValueKind.String);
             }
             return key;
+        }
+
+        private static void RemoveLegacyVerb(string extension, string verb)
+        {
+            var key = @"SystemFileAssociations\" + extension + @"\shell\" + verb;
+            if (!RegistryHelper.ClassesKeyExists(key)) return;
+            RegistryHelper.DeleteClassesKey(key, 3);
+            Report("removed old entry HKCR\\" + key);
         }
 
         private static List<string> Extensions(Settings settings)

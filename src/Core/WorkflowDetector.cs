@@ -77,17 +77,40 @@ namespace ComfyShellExt.Core
             return Inspect(stream, options).HasWorkflow;
         }
 
+        /// <summary>
+        /// Fast path used by the thumbnail handler: returns which AI tool produced the file
+        /// ("ComfyUI", "A1111", ...), or null when nothing recognised. The badge text comes from
+        /// this, so the thumbnail handler only needs one pass over the file.
+        /// </summary>
+        public static string DetectGenerator(Stream stream)
+        {
+            var settings = Settings.Current;
+            var options = DetectOptions.Fast();
+            options.EnableRawScan = settings.EnableRawScan;
+            options.MaxRawScanBytes = Math.Max(1, settings.MaxRawScanMB) * 1024L * 1024L;
+            var info = Inspect(stream, options);
+            return info.HasAiMeta ? (info.Generator ?? AiMeta.Comfy) : null;
+        }
+
         /// <summary>Called for every metadata entry. Returns false to stop reading the file.</summary>
         private static bool Consume(MetaEntry entry, WorkflowInfo info, DetectOptions options)
         {
             var value = entry.Value;
             if (!JsonScan.HasMarker(value))
             {
-                // XMP keeps JSON inside XML, so the quotes arrive as &quot; and the markers hide.
-                if (value.IndexOf("&quot;", StringComparison.Ordinal) < 0 &&
-                    value.IndexOf("&#34;", StringComparison.Ordinal) < 0) return true;
-                value = TextCodec.UnescapeXml(value);
-                if (!JsonScan.HasMarker(value)) return true;
+                bool unescape = value.IndexOf("&quot;", StringComparison.Ordinal) >= 0 ||
+                                value.IndexOf("&#34;", StringComparison.Ordinal) >= 0;
+                var plain = unescape ? TextCodec.UnescapeXml(value) : value;
+                if (!JsonScan.HasMarker(plain))
+                {
+                    // Not ComfyUI. Sniff the entry for other AI tools before moving on; when the
+                    // value was XMP escaped the tool text hides behind &quot; too.
+                    var same = entry;
+                    same.Value = plain;
+                    AiMeta.Sniff(same.Key, same.Value, info, !options.FastDetectOnly);
+                    return !(options.FastDetectOnly && info.HasAiMeta);
+                }
+                value = plain;
             }
 
             // Detection never depends on the payload being complete: a container may well have
@@ -96,6 +119,7 @@ namespace ComfyShellExt.Core
             {
                 info.HasWorkflow = true;
                 info.Source = entry.Origin;
+                info.Generator = AiMeta.Comfy;
             }
             if (options.FastDetectOnly) return false;
 

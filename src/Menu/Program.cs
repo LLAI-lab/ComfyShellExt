@@ -17,6 +17,7 @@ namespace ComfyShellExt.Menu
     {
         private const string Title = "ComfyShellExt";
         private static bool _quiet;
+        internal static bool Quiet { get { return _quiet; } }
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         private static extern bool AttachConsole(int processId);
@@ -51,8 +52,10 @@ namespace ComfyShellExt.Menu
                 if (verb == null || files.Count == 0) return Usage();
                 switch (verb)
                 {
-                    case "view": return View(files[0], noOpen);
+                    case "view": return View(files, noOpen);
                     case "export": return Export(files, target, saveAs, noOpen);
+                    case "obfuscate": return ObfuscateCommand.Run(files, true, noOpen);
+                    case "deobfuscate": return ObfuscateCommand.Run(files, false, noOpen);
                     default: return Usage();
                 }
             }
@@ -66,24 +69,61 @@ namespace ComfyShellExt.Menu
         private static int Usage()
         {
             Show("用法：\n\n" +
-                 "ComfyWorkflowMenu.exe view <文件>\n    查看内嵌的 ComfyUI 工作流\n\n" +
-                 "ComfyWorkflowMenu.exe export <文件> [...]\n    导出工作流为 .json（默认存到源文件旁边）\n" +
-                 "    --saveas    弹出保存对话框\n    --to <路径>  指定输出文件\n",
+                 "ComfyWorkflowMenu.exe view <文件> [...]\n    查看 AI 生图元数据（ComfyUI / SD WebUI / NovelAI 等）\n\n" +
+                 "ComfyWorkflowMenu.exe export <文件> [...]\n    导出 ComfyUI 工作流为 .json（默认存到源文件旁边）\n" +
+                 "    --saveas    弹出保存对话框\n    --to <路径>  指定输出文件\n\n" +
+                 "ComfyWorkflowMenu.exe obfuscate <图片> [...]\n    混淆图片：Gilbert 曲线像素重排，输出 <原名>_混淆.png\n\n" +
+                 "ComfyWorkflowMenu.exe deobfuscate <图片> [...]\n    解混淆：还原像素重排，输出 <原名>_还原.png\n" +
+                 "    支持多选；输出一律为无元数据的 PNG\n",
                 MessageBoxIcon.Information);
             return 2;
         }
 
-        private static int View(string path, bool noOpen)
+        /// <summary>
+        /// Builds the info page for one or many files. Files without recognised AI metadata are
+        /// listed at the end instead of failing the whole batch.
+        /// </summary>
+        private static int View(List<string> files, bool noOpen)
         {
-            var info = Inspect(path);
-            if (info == null) return 1;
-            var facts = WorkflowFacts.From(info);
-            var html = HtmlReport.Build(Path.GetFullPath(path), info, facts);
+            var reports = new List<FileReport>();
+            var skipped = new List<string>();
+            foreach (var path in files)
+            {
+                if (!File.Exists(path)) { skipped.Add(Path.GetFileName(path)); continue; }
+                var info = WorkflowDetector.InspectFile(path, DetectOptions.Full());
+                if (info.Generator == null)
+                {
+                    skipped.Add(Path.GetFileName(path));
+                    continue;
+                }
+                reports.Add(new FileReport { Path = Path.GetFullPath(path), Info = info,
+                    Facts = WorkflowFacts.From(info) });
+            }
+            if (reports.Count == 0)
+            {
+                var names = new StringBuilder();
+                for (int i = 0; i < skipped.Count && i < 8; i++)
+                    names.Append(names.Length > 0 ? "\n" : "").Append("  ").Append(skipped[i]);
+                Show("这些文件里没有找到可识别的 AI 生图元数据。\n\n支持：ComfyUI、SD WebUI/A1111、" +
+                     "NovelAI、SwarmUI、Fooocus、InvokeAI。\n" + names,
+                    MessageBoxIcon.Information);
+                return 1;
+            }
+            var html = HtmlReport.BuildPage(reports);
             var dir = Path.Combine(Path.GetTempPath(), "ComfyShellExt");
             Paths.EnsureDir(dir);
             Sweep(dir);
-            var file = Path.Combine(dir, Safe(Path.GetFileName(path)) + ".html");
+            var file = Path.Combine(dir, Safe(Path.GetFileName(reports[0].Path)) +
+                                      (reports.Count > 1 ? "+..." : "") + ".html");
             File.WriteAllText(file, html, new UTF8Encoding(false));
+            if (skipped.Count > 0 && !_quiet)
+            {
+                var message = new StringBuilder("已打开 ")
+                    .Append(reports.Count).Append(" 个文件的信息。\n\n未识别到 AI 元数据：\n");
+                for (int i = 0; i < skipped.Count && i < 8; i++)
+                    message.Append("  ").Append(skipped[i]).Append('\n');
+                Show(message.ToString(), MessageBoxIcon.Information);
+            }
             if (!noOpen) Process.Start(new ProcessStartInfo(file) { UseShellExecute = true });
             return 0;
         }
@@ -97,6 +137,15 @@ namespace ComfyShellExt.Menu
                 var info = Inspect(path, files.Count == 1);
                 if (info == null) { skipped.Add(Path.GetFileName(path)); continue; }
                 var json = info.WorkflowJson ?? info.PromptJson;
+                if (json == null)
+                {
+                    // AI metadata without a ComfyUI graph: only the viewer can show this.
+                    if (files.Count == 1)
+                        Show("这个文件由 " + info.Generator + " 生成，没有可导出的 ComfyUI 工作流 JSON。",
+                            MessageBoxIcon.Information);
+                    else skipped.Add(Path.GetFileName(path));
+                    continue;
+                }
                 var suffix = info.WorkflowJson != null ? ".workflow.json" : ".prompt.json";
                 var output = target;
                 if (output == null && saveAs && files.Count == 1) output = Ask(path, suffix);
@@ -143,9 +192,9 @@ namespace ComfyShellExt.Menu
                 return null;
             }
             var info = WorkflowDetector.InspectFile(path, DetectOptions.Full());
-            if (info.HasWorkflow) return info;
+            if (info.Generator != null) return info;
             if (complain)
-                Show("这个文件里没有找到 ComfyUI 工作流。\n\n" + Path.GetFileName(path) +
+                Show("这个文件里没有找到可识别的 AI 生图元数据。\n\n" + Path.GetFileName(path) +
                      "\n容器：" + info.Container, MessageBoxIcon.Information);
             return null;
         }
@@ -163,8 +212,8 @@ namespace ComfyShellExt.Menu
             }
         }
 
-        /// <summary>Never overwrites: adds a numeric suffix when the name is taken.</summary>
-        private static string Unique(string path)
+    /// <summary>Never overwrites: adds a numeric suffix when the name is taken.</summary>
+    internal static string Unique(string path)
         {
             if (!File.Exists(path)) return path;
             var dir = Path.GetDirectoryName(path);
@@ -180,7 +229,7 @@ namespace ComfyShellExt.Menu
             return path;
         }
 
-        private static void Reveal(string path)
+        internal static void Reveal(string path)
         {
             try
             {
@@ -209,7 +258,7 @@ namespace ComfyShellExt.Menu
             return sb.ToString();
         }
 
-        private static void Show(string message, MessageBoxIcon icon)
+    internal static void Show(string message, MessageBoxIcon icon)
         {
             if (_quiet)
             {
