@@ -27,12 +27,10 @@ namespace ComfyShellExt.Shell
             var image = provider as ImageThumbnailProvider;
             if (viaStream && image != null)
             {
-                ComTypes.IStream stream;
-                int hr = NativeMethods.SHCreateStreamOnFileEx(full, ShellConstants.StgmRead, 0, false,
-                    IntPtr.Zero, out stream);
-                if (hr != 0 || stream == null) throw new IOException("SHCreateStreamOnFileEx failed");
-                image.Initialize(stream, ShellConstants.StgmRead);
-                Append(report, "initialised with a stream (no path, like a zip folder item)");
+                // The image handler no longer takes streams (path needed for obfuscation preview
+                // keywords), so this mode now means "file path only, no extension info".
+                image.Initialize(full, ShellConstants.StgmRead);
+                Append(report, "initialised with a file path");
             }
             else
             {

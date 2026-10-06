@@ -34,6 +34,16 @@ namespace ComfyShellExt.Shell
                     Report("WARNING: video.disableprocessisolation=0, Explorer will not be able to " +
                            "initialise the video handler");
             }
+            else if (settings.ImageDisableProcessIsolation)
+            {
+                // Same reasoning: stream initialisation hides the file name, which the obfuscation
+                // preview's keyword matching needs. The image decoder is managed GDI+/WIC, so
+                // running inside Explorer is an acceptable risk, same as the video handler.
+                Report(RegistryHelper.SetClsidValue(clsid, "DisableProcessIsolation", 1)
+                    ? "DisableProcessIsolation=1 set (obfuscation preview needs the file name)"
+                    : "WARNING: could not set DisableProcessIsolation, obfuscation preview keywords " +
+                      "will not match in Explorer");
+            }
             foreach (var extension in extensions)
             {
                 try { RegisterExtension(extension.ToLowerInvariant(), clsid); }

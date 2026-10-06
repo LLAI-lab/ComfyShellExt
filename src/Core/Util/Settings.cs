@@ -115,6 +115,13 @@ namespace ComfyShellExt.Core.Util
         /// ini; matching is case-insensitive substring. Defaults keep the built-in behaviour.
         /// </summary>
         public string[] ObfuscateKeywords = { "_混淆", "obfuscated_" };
+        /// <summary>
+        /// The sandboxed thumbnail host initialises handlers through a stream, which hides the
+        /// file name and breaks keyword based obfuscation preview. Opting the image handler out of
+        /// process isolation makes Explorer initialise with the item/path instead; the decoder is
+        /// managed GDI+/WIC, so running it inside Explorer is an accepted risk, same as video.
+        /// </summary>
+        public bool ImageDisableProcessIsolation = true;
 
         public static Settings Current
         {
@@ -211,6 +218,8 @@ namespace ComfyShellExt.Core.Util
             s.ObfuscatePreview = Bool(map, "obfuscate.preview", s.ObfuscatePreview);
             s.BadgeTextObfuscated = Str(map, "badge.text.obfuscated", s.BadgeTextObfuscated);
             s.ObfuscateKeywords = Words(map, "obfuscate.keywords", s.ObfuscateKeywords);
+            s.ImageDisableProcessIsolation =
+                Bool(map, "image.disableprocessisolation", s.ImageDisableProcessIsolation);
             return s;
         }
 

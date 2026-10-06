@@ -7,24 +7,22 @@ using ComTypes = System.Runtime.InteropServices.ComTypes;
 namespace ComfyShellExt.Shell
 {
     /// <summary>
-    /// Thumbnail handler for still images. Accepts a stream, which lets it work for items that have
-    /// no file system path, such as images inside a zip folder.
+    /// Thumbnail handler for still images. Deliberately does not implement IInitializeWithStream,
+    /// mirroring the video handler: the sandboxed thumbnail host initialises through a stream and
+    /// never reveals the file name, which the obfuscation preview keywords need. Opting out of
+    /// process isolation (image.disableprocessisolation) makes Explorer initialise with the
+    /// shell item / file path instead. Items without a file system path (images inside a zip)
+    /// lose their thumbnail handler and fall back to whatever the shell can do.
     /// </summary>
     [ComVisible(true)]
     [Guid("B8D82C63-93A4-451F-B5D6-0EB66DA46857")]
     [ClassInterface(ClassInterfaceType.None)]
     [ProgId("ComfyShellExt.ImageThumbnailProvider")]
-    public sealed class ImageThumbnailProvider : ThumbnailProviderBase, IInitializeWithStream
+    public sealed class ImageThumbnailProvider : ThumbnailProviderBase
     {
         public const string Clsid = "{B8D82C63-93A4-451F-B5D6-0EB66DA46857}";
 
         protected override MediaKind Kind { get { return MediaKind.Image; } }
-
-        public void Initialize(ComTypes.IStream pstream, uint grfMode)
-        {
-            SourceStream = pstream;
-            Log.Write("init stream (image)");
-        }
 
         [ComRegisterFunction]
         public static void RegisterServer(Type type) { Registrar.Register(type, MediaKind.Image); }
