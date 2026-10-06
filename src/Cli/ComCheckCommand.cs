@@ -23,8 +23,9 @@ namespace ComfyShellExt.Cli
         public static int Run(Args args)
         {
             int failures = 0;
-            failures += CheckClass("image", new ImageThumbnailProvider(), true);
+            failures += CheckClass("image", new ImageThumbnailProvider(), false);
             failures += CheckClass("video", new VideoThumbnailProvider(), false);
+            failures += CheckIsolation();
             failures += CheckMenu(args.Values.Count > 0 ? args.Values[0] : null);
             failures += CheckVerbDecoding();
             if (args.Values.Count > 0) failures += RoundTrip(args.Values[0], args.Int("size", 256));
@@ -195,6 +196,43 @@ namespace ComfyShellExt.Cli
                 }
             }
             finally { Marshal.Release(unknown); }
+            return failures;
+        }
+
+        /// <summary>
+        /// Both providers initialise from the file path, which the sandboxed thumbnail host
+        /// refuses unless the CLSID opts out of process isolation; without the value Explorer
+        /// silently falls back to the original provider and no thumbnail of ours is drawn at
+        /// all. Read from the live registry rather than the ini, since that is what Explorer obeys.
+        /// </summary>
+        private static int CheckIsolation()
+        {
+            int failures = 0;
+            failures += CheckIsolation("image", typeof(ImageThumbnailProvider));
+            failures += CheckIsolation("video", typeof(VideoThumbnailProvider));
+            return failures;
+        }
+
+        private static int CheckIsolation(string label, Type type)
+        {
+            int failures = 0;
+            object value = null;
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(
+                    "CLSID\\{" + type.GUID + "}"))
+                    value = key == null ? null : key.GetValue("DisableProcessIsolation");
+            }
+            catch { }
+            bool set;
+            try { set = Convert.ToInt32(value) == 1; }
+            catch { set = false; }
+            bool ok = set;
+            if (!ok) failures++;
+            Console.WriteLine("{0,-6} {1,-24} {2,-10} {3}", label, "DisableProcessIsolation",
+                set ? "=1" : "missing",
+                ok ? "as designed" : "UNEXPECTED: path based handler, Explorer will not initialise " +
+                                     "it - re-run install.bat as admin");
             return failures;
         }
 
